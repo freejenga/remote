@@ -26,7 +26,7 @@ from . import crypto
 DB_FILE = os.environ.get('PLATFORM_DB', 'clinical_platform.db')
 
 # Increment this constant whenever a new migration step is added below.
-_SCHEMA_VERSION = 5
+_SCHEMA_VERSION = 6
 
 
 @contextmanager
@@ -191,6 +191,37 @@ def _migrate_v4_to_v5(c) -> None:
     )
 
 
+def _migrate_v5_to_v6(c) -> None:
+    """Add structured Schedule-of-Events + per-subject visit tracking.
+
+    These tables are the deterministic core for visit scheduling: ``soe_events``
+    is the normalized protocol matrix (one row per visit/activity, materialized
+    from a parsed protocol version), and ``subject_visits`` is each enrolled
+    subject's calendar of visit instances with computed windows and recorded
+    actuals. Visit-window and compliance math (``app.scheduling``) is pure code
+    over these rows -- no LLM, fully reproducible.
+    """
+    c.execute(
+        'CREATE TABLE IF NOT EXISTS soe_events '
+        '(id TEXT PRIMARY KEY, study_id TEXT NOT NULL, version_id TEXT, '
+        'ordinal INTEGER, visit_name TEXT, day INTEGER, window TEXT, '
+        'activity TEXT, conditional TEXT, created_at TEXT)'
+    )
+    c.execute(
+        'CREATE TABLE IF NOT EXISTS subject_visits '
+        '(id TEXT PRIMARY KEY, subject_id TEXT NOT NULL, study_id TEXT, '
+        'version_id TEXT, visit_name TEXT, day INTEGER, window TEXT, '
+        'target_date TEXT, earliest_date TEXT, latest_date TEXT, '
+        'actual_date TEXT, created_at TEXT, updated_at TEXT)'
+    )
+    # SoE rows are listed/refreshed per study (and per version).
+    c.execute('CREATE INDEX IF NOT EXISTS idx_soe_study ON soe_events (study_id)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_soe_version ON soe_events (version_id)')
+    # Subject calendars are queried by study (compliance report) and by subject.
+    c.execute('CREATE INDEX IF NOT EXISTS idx_sv_study ON subject_visits (study_id)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_sv_subject ON subject_visits (subject_id)')
+
+
 # Ordered list of (from_version, migration_function) pairs.
 _MIGRATIONS = [
     (0, _migrate_v0_to_v1),
@@ -198,6 +229,7 @@ _MIGRATIONS = [
     (2, _migrate_v2_to_v3),
     (3, _migrate_v3_to_v4),
     (4, _migrate_v4_to_v5),
+    (5, _migrate_v5_to_v6),
 ]
 
 
