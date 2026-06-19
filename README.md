@@ -1,6 +1,6 @@
 # Clinical Research Platform
 
-A unified FastAPI app combining three modules around a shared study-subject key:
+A unified FastAPI app combining three core modules around a shared study-subject key:
 
 1. **Protocol agent** — turns clinical trial protocols into visit schedules,
    operational rows, SoA-vs-narrative conflict reports, and CTMS-ready exports.
@@ -9,14 +9,26 @@ A unified FastAPI app combining three modules around a shared study-subject key:
 3. **Serengeti dispatch** — non-emergency medical transport trips with the
    original pricing engine and invoice/receipt summaries.
 
-The three modules tie together through the shared `subject` / `voucher` /
+The modules tie together through the shared `subject` / `voucher` /
 `subjectId` identifier, so a study subject's protocol visits, compliance status,
 and transport trips line up.
+
+Layered on top are four additional capabilities that turn a parsed protocol into
+an operable trial: a **document knowledge base (RAG)** for grounded Q&A, a
+**deterministic scheduling engine** (visit windows + compliance, no AI in the
+time math), an **agentic source-document generator** (generation → formatting →
+critic, layered on a deterministic skeleton), and a **financial reconciliation**
+layer (Schedule-of-Events activities ↔ study budget).
 
 ## Modules & endpoints
 | Module     | Prefix        | Key endpoints |
 |------------|---------------|----------------|
-| Protocol   | `/`           | `POST /parse-text`, `POST /parse-file`, `POST /export-file` |
+| Protocol   | `/`           | `POST /parse-text`, `POST /parse-file`, `POST /export-file`, `POST /export-schedule` |
+| Studies    | `/studies`    | study/version registry; `POST /studies`, `/{id}/versions[/upload]`, version review + export |
+| Scheduling | `/scheduling` | `POST /studies/{id}/soe` (materialize SoE), `/subjects/{id}/calendar`, `PATCH /visits/{id}/actual`, `GET /compliance`, `/next-due` |
+| Documents (RAG) | `/documents` | `POST /documents` (upload/index), `GET /documents/search`, `GET /documents`, `DELETE /documents/{id}` |
+| Source docs | `/source-documents` | `POST /source-documents` (deterministic packet), `POST /source-documents/generate` (AI generation→critic) |
+| Billing    | `/billing`    | `POST /studies/{id}/budget[/upload]`, `POST /map/auto`, `PUT /map`, `GET /reconcile`, `GET /reconcile/export` |
 | Compliance | `/compliance` | `GET/POST /saved_subjects`, `/visit_logs`, `/app_date`, `GET /integrity` |
 | Dispatch   | `/dispatch`   | `GET /rates`, `POST /quote`, `GET/POST /trips`, `DELETE /trips/{id}`, `GET /invoice` |
 | AI chat    | `/chat`       | `POST /chat/` (non-streaming), `POST /chat/stream` (SSE) |
@@ -26,7 +38,8 @@ and transport trips line up.
 HTML UIs are served at `/ui/compliance.html`, `/ui/dispatch.html`, `/ui/chat.html`,
 and `/ui/login.html`; all pages carry a floating AI-chat widget. Persistence uses
 a shared SQLite file (`clinical_platform.db`, override with `PLATFORM_DB`), with
-schema migrations tracked via `PRAGMA user_version`.
+schema migrations tracked via `PRAGMA user_version`. An **optional PostgreSQL
+backend** can be selected with `PLATFORM_DB_URL` (see Data security below).
 
 ## Features
 - Upload protocol text/TXT/PDF/DOCX (with optional OCR fallback for scanned PDFs)
@@ -40,6 +53,20 @@ schema migrations tracked via `PRAGMA user_version`.
 - Serve a JSON API via FastAPI; `langgraph` is optional (linear fallback runner)
 - **AI assistant** with tool-based data access, persistent learning, streaming
   replies, and answer provenance
+- **Document knowledge base (RAG)** — upload protocols/SOPs/memos; structure-aware
+  PDF table extraction (pdfplumber), section-aware chunking (tables kept intact),
+  and TF-IDF retrieval with optional local semantic embeddings (hybrid RRF). The
+  AI assistant can search it via `search_documents`.
+- **Deterministic scheduling** — materialize a protocol's Schedule of Events,
+  generate per-subject visit calendars, and compute visit windows + compliance
+  (on-time/early/late/upcoming/due/missed) and the next-due visit — **no LLM in
+  the time math**, so results are reproducible.
+- **Agentic source-document generation** — a generation → formatting → critic
+  loop layered on a deterministic assembler skeleton; the critic re-checks the
+  draft against the protocol and revises until aligned.
+- **Financial reconciliation** — map Schedule-of-Events activities to study
+  budget items, reconcile completed/missed/pending visits, and export an
+  accounting-ready CSV/XLSX.
 - **Security**: de-identification, token + RBAC auth, encryption at rest,
   tamper-evident audit trail, memory hygiene (see Data security below)
 
@@ -52,16 +79,25 @@ python main.py
 API docs: http://localhost:8000/docs (all three modules)
 Module index: http://localhost:8000/
 
-Run protocol review UI (with the embedded AI assistant):
+Run the Streamlit UI:
 ```bash
 streamlit run app/ui.py
 ```
-The protocol page has a built-in AI chat that can see the protocol you've
-parsed (answers about its visits/activities/conflicts directly) and can also
-look up subjects, compliance, and trips, and remember preferences across
-sessions. It needs `ANTHROPIC_API_KEY` set in the environment; without it the
-chat shows a configuration notice and the rest of the page works normally.
-Model defaults to `claude-haiku-4-5` (override with `CHAT_MODEL`).
+The UI has four tabs:
+1. **Protocol & Chat** — upload/parse a protocol, review visits/conflicts/rows,
+   export, and a built-in AI chat that sees the parsed protocol and can search
+   uploaded documents and look up subjects/compliance/trips.
+2. **Documents (RAG)** — index documents and run de-identified semantic search.
+3. **Source Documents** — download the deterministic fillable packet, or run the
+   AI generation/critic pipeline (per-visit approval badges).
+4. **Scheduling & Billing** — save a parsed protocol as a study, materialize the
+   SoE, build a subject calendar, view compliance + next-due, and manage the
+   budget + run/export reconciliation.
+
+The AI features need `ANTHROPIC_API_KEY` set in the environment; without it the
+chat and AI source-doc generation show a configuration notice and everything
+deterministic (parsing, scheduling, the source-doc packet, billing) works
+normally. Chat model defaults to `claude-haiku-4-5` (override with `CHAT_MODEL`).
 
 On Windows (PowerShell), the same commands work:
 ```powershell
@@ -81,6 +117,11 @@ Configurable via environment variables (all default-safe):
 | `CHAT_LOG_CONVERSATIONS` | `0` (off) | When `1`, conversation turns are persisted (scrubbed of identifiers). Off by default so chat history doesn't accumulate PHI. Learnings are always saved (also scrubbed). |
 | `PLATFORM_ENCRYPTION_KEY` | unset (plaintext) | When set, sensitive JSON blobs (subjects, visit logs, trips, chat memory) are encrypted at rest with Fernet before they hit the `.db` file, so a copied database is unreadable without the key. Reads decrypt transparently. Any passphrase works (derived via SHA-256). |
 | `RBAC_ADMIN_USER` / `RBAC_ADMIN_PASSWORD` | unset | If set (and no users exist yet), seeds an initial admin account. Users log in at `/rbac/login`; roles are `viewer` < `coordinator` < `admin`. A valid RBAC session also satisfies the token gate, and the logged-in username becomes the **actor** in the audit trail. |
+| `ANTHROPIC_API_KEY` | unset | Enables the AI chat and AI source-document generation. Without it, those features return a clear configuration notice and all deterministic features still work. Required for `/chat` and `POST /source-documents/generate`. |
+| `CHAT_MODEL` | `claude-haiku-4-5` | Anthropic model used by the chat + agent pipeline. |
+| `PLATFORM_EMBEDDINGS` | `0` (off) | When `1`, document retrieval becomes **hybrid** (TF-IDF + local semantic embeddings, fused via reciprocal-rank). Requires `requirements-embeddings.txt`; the model runs locally (nothing leaves the box). Off → TF-IDF only. |
+| `PLATFORM_EMBED_MODEL` | `BAAI/bge-small-en-v1.5` | Local sentence-transformer model used when embeddings are enabled. |
+| `PLATFORM_DB_URL` | unset (SQLite) | When set to `postgresql://user:pw@host/db`, the shared store uses **PostgreSQL** instead of the SQLite file (requires `requirements-postgres.txt`). Unset → SQLite (`PLATFORM_DB`). |
 
 **Audit trail.** Every data mutation, export, and chat query is recorded in an
 append-only, hash-chained `audit_log` (`app/audit.py`). Each entry commits the
@@ -108,20 +149,31 @@ python main.py    # then sign in at http://localhost:8000/ui/login.html
 ```bash
 pytest -q
 ```
-The suite (**125 tests**) covers SoA parsing (multi-row headers, footnotes,
+The suite (**192 tests**) covers SoA parsing (multi-row headers, footnotes,
 chronological ordering, langgraph-optional fallback), the unified platform
 (compliance + dispatch pricing, schema migrations, validation, integrity),
 the AI chat (tools, learning memory, streaming, provenance), RBAC (accounts,
-roles, sessions), and the security layer (de-identification, auth gate,
-encryption at rest, tamper-evident audit, memory hygiene).
+roles, sessions), the security layer (de-identification, auth gate, encryption
+at rest, tamper-evident audit, memory hygiene), the document knowledge base
+(table-aware chunking, section labels, hybrid retrieval), deterministic
+scheduling (window parsing/math, compliance status, next-due), the agentic
+source-doc pipeline (critic reject→revise→pass, fallbacks, offline via a stubbed
+LLM), financial reconciliation, and the Postgres dialect adapter.
 
-### Optional OCR
-For scanned PDFs, install the extras and the Tesseract binary:
+> One test (`tests/test_pipeline.py::test_ingestion_ocr_fallback_called_on_empty_pdf`)
+> can fail on Windows with a `tmp_path` permission error owned by a different OS
+> user — a pre-existing environment issue, not a code defect. Deselect it:
+> `pytest -q --deselect "tests/test_pipeline.py::test_ingestion_ocr_fallback_called_on_empty_pdf"`.
+
+### Optional extras
 ```bash
-pip install -r requirements-ocr.txt   # pytesseract, pdf2image, Pillow
+pip install -r requirements-ocr.txt        # scanned-PDF OCR (needs Tesseract binary)
+pip install -r requirements-embeddings.txt # local semantic search (PLATFORM_EMBEDDINGS=1)
+pip install -r requirements-postgres.txt   # PostgreSQL backend (PLATFORM_DB_URL=postgresql://…)
 ```
-Without them, scanned-PDF parsing degrades silently (returns no text) rather
-than erroring.
+Each is optional: without OCR, scanned-PDF parsing degrades silently (returns no
+text); without embeddings, retrieval is TF-IDF only; without psycopg, the app
+uses SQLite. None of these block the default install.
 
 ### Docker / CI
 A `Dockerfile` runs the API (`uvicorn app.api:app` on port 8000) and
