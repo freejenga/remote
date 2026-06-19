@@ -1,5 +1,8 @@
 import os
 
+from .envfile import load_dotenv
+load_dotenv()  # pull .env (e.g. ANTHROPIC_API_KEY) into the env before anything reads it
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles

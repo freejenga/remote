@@ -1,5 +1,8 @@
 import os
 
+from app.envfile import load_dotenv
+load_dotenv()  # pull .env (e.g. ANTHROPIC_API_KEY) into the env before anything reads it
+
 import streamlit as st
 import pandas as pd
 
