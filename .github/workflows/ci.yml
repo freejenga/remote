@@ -33,9 +33,17 @@ jobs:
       - name: ruff (check)
         working-directory: clinical_protocol_agent_final
         run: python -m ruff check .
-      - name: Run tests (pytest)
+      - name: Run tests (pytest + coverage)
         working-directory: clinical_protocol_agent_final
-        run: pytest -q
+        run: |
+          pytest --cov=./ --cov-report=xml:coverage.xml --cov-report=html:htmlcov -q
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            clinical_protocol_agent_final/coverage.xml
+            clinical_protocol_agent_final/htmlcov
 
   frontend:
     name: Frontend — lint & build
