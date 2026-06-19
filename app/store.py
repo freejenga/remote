@@ -29,10 +29,25 @@ DB_FILE = os.environ.get('PLATFORM_DB', 'clinical_platform.db')
 _SCHEMA_VERSION = 7
 
 
+def current_dialect() -> str:
+    """Which SQL backend is active: 'postgres' if PLATFORM_DB_URL points at one,
+    else the default 'sqlite'. Read live (not cached) so it honours the env."""
+    url = os.environ.get('PLATFORM_DB_URL')
+    if url and url.startswith(('postgres://', 'postgresql://')):
+        return 'postgres'
+    return 'sqlite'
+
+
 @contextmanager
 def get_conn():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
+    """Yield a DB connection. SQLite by default; Postgres when PLATFORM_DB_URL is
+    set (via the pgcompat shim, which keeps the sqlite3-style API)."""
+    if current_dialect() == 'postgres':
+        from . import pgcompat  # lazy: psycopg is an optional dependency
+        conn = pgcompat.connect(os.environ['PLATFORM_DB_URL'])
+    else:
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
     try:
         yield conn
         conn.commit()
@@ -51,12 +66,23 @@ def unpack(blob: str):
 
 
 def _get_user_version(conn) -> int:
-    return conn.execute('PRAGMA user_version').fetchone()[0]
+    if current_dialect() == 'sqlite':
+        return conn.execute('PRAGMA user_version').fetchone()[0]
+    # Postgres has no PRAGMA: track the applied level in a one-row table.
+    conn.execute('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER)')
+    row = conn.execute('SELECT version FROM schema_version').fetchone()
+    if row is None:
+        conn.execute('INSERT INTO schema_version (version) VALUES (0)')
+        return 0
+    return row[0]
 
 
 def _set_user_version(conn, version: int) -> None:
-    # PRAGMA user_version does not accept bound parameters; the value is an int.
-    conn.execute(f'PRAGMA user_version = {int(version)}')
+    if current_dialect() == 'sqlite':
+        # PRAGMA user_version does not accept bound parameters; the value is an int.
+        conn.execute(f'PRAGMA user_version = {int(version)}')
+    else:
+        conn.execute('UPDATE schema_version SET version = ?', (int(version),))
 
 
 def _migrate_v0_to_v1(c) -> None:
@@ -72,10 +98,13 @@ def _migrate_v0_to_v1(c) -> None:
         'CREATE TABLE IF NOT EXISTS chat_memory '
         '(id TEXT PRIMARY KEY, subject TEXT, kind TEXT, content TEXT, created_at TEXT)'
     )
-    # Audit module — append-only, hash-chained tamper-evident log
+    # Audit module — append-only, hash-chained tamper-evident log.
+    # Autoincrement PK spelling differs by dialect (SQLite vs Postgres).
+    _autopk = ('rowid INTEGER PRIMARY KEY AUTOINCREMENT'
+               if current_dialect() == 'sqlite' else 'rowid BIGSERIAL PRIMARY KEY')
     c.execute(
         'CREATE TABLE IF NOT EXISTS audit_log '
-        '(rowid INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT, ts TEXT, actor TEXT, '
+        f'({_autopk}, id TEXT, ts TEXT, actor TEXT, '
         'action TEXT, detail TEXT, prev_hash TEXT, hash TEXT)'
     )
 
@@ -174,9 +203,12 @@ def _migrate_v4_to_v5(c) -> None:
       over the *already de-identified* chunk text, so the boundary is unchanged.
     """
     # Idempotent ADD COLUMN: tolerate re-runs / partial upgrades.
-    cols = {r[1] for r in c.execute('PRAGMA table_info(doc_chunks)').fetchall()}
-    if 'section' not in cols:
-        c.execute('ALTER TABLE doc_chunks ADD COLUMN section TEXT')
+    if current_dialect() == 'sqlite':
+        cols = {r[1] for r in c.execute('PRAGMA table_info(doc_chunks)').fetchall()}
+        if 'section' not in cols:
+            c.execute('ALTER TABLE doc_chunks ADD COLUMN section TEXT')
+    else:
+        c.execute('ALTER TABLE doc_chunks ADD COLUMN IF NOT EXISTS section TEXT')
     c.execute(
         'CREATE TABLE IF NOT EXISTS doc_vectors '
         '(chunk_id TEXT PRIMARY KEY, doc_id TEXT NOT NULL, study_id TEXT, '

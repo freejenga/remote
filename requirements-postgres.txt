@@ -1,0 +1,10 @@
+# Optional PostgreSQL backend (the platform is SQLite by default).
+# Install with: pip install -r requirements-postgres.txt
+#
+# Then point the app at Postgres instead of the local SQLite file:
+#   PLATFORM_DB_URL=postgresql://user:password@host:5432/dbname
+# When PLATFORM_DB_URL is unset, the app uses SQLite (PLATFORM_DB file) as before.
+#
+# The pgcompat shim translates the SQLite-dialect SQL the modules emit; schema
+# migrations apply the same way (tracked in a schema_version table on Postgres).
+psycopg[binary]>=3.1
