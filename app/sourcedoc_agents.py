@@ -84,27 +84,69 @@ class SourceDocNotConfigured(RuntimeError):
     """Raised when the LLM backend (ANTHROPIC_API_KEY/anthropic) is unavailable."""
 
 
+class SourceDocError(RuntimeError):
+    """Raised when an agent's LLM response can't be used (e.g. invalid JSON)."""
+
+
+# Max tokens per agent call. Large enough that a worksheet/critique JSON won't be
+# truncated mid-object (truncation was the cause of "Expecting ',' delimiter").
+_MAX_TOKENS = 4096
+
+
 # ---------------------------------------------------------------------------
 # LLM seam (monkeypatched in tests)
 # ---------------------------------------------------------------------------
 def _parse_json(text: str) -> dict:
-    """Extract the first JSON object from a model response."""
-    if not text:
+    """Extract a JSON object from a model response.
+
+    Tolerates markdown code fences and surrounding prose by (1) stripping a
+    ```json fence, then (2) scanning for the first *balanced* ``{...}`` object.
+    Raises ValueError if no complete object is present (e.g. the reply was
+    truncated), so callers get a clean error instead of a cryptic decode message.
+    """
+    if not text or not text.strip():
         raise ValueError("empty LLM response")
+    t = text.strip()
+    if t.startswith("```"):
+        t = re.sub(r"^```[a-zA-Z0-9]*\n?", "", t)
+        t = re.sub(r"\n?```$", "", t).strip()
     try:
-        return json.loads(text)
+        return json.loads(t)
     except json.JSONDecodeError:
-        m = re.search(r"\{.*\}", text, re.S)
-        if not m:
-            raise ValueError("no JSON object in LLM response")
-        return json.loads(m.group(0))
+        pass
+    # Balanced-brace scan from the first '{' (string-aware), to ignore trailing
+    # prose and to detect truncation (no matching close brace -> raise).
+    start = t.find("{")
+    if start != -1:
+        depth = 0
+        in_str = esc = False
+        for i in range(start, len(t)):
+            ch = t[i]
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+            elif ch == '"':
+                in_str = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return json.loads(t[start:i + 1])
+    raise ValueError("no complete JSON object in LLM response "
+                     "(it may have been truncated)")
 
 
 def _call_llm(system: str, prompt: str) -> dict:
     """Call the Anthropic model and parse a JSON object from the reply.
 
     Reuses the chat module's client construction so configuration/credentials
-    live in one place. Raises ``SourceDocNotConfigured`` when no key/package.
+    live in one place. Raises ``SourceDocNotConfigured`` when no key/package,
+    and ``SourceDocError`` when the model's reply isn't usable JSON.
     """
     from .chat import _get_client, ChatNotConfigured
     try:
@@ -114,12 +156,15 @@ def _call_llm(system: str, prompt: str) -> dict:
     import anthropic
     try:
         resp = client.messages.create(
-            model=model, max_tokens=2000, system=system,
+            model=model, max_tokens=_MAX_TOKENS, system=system,
             messages=[{"role": "user", "content": prompt}])
     except anthropic.APIError as exc:
         raise SourceDocNotConfigured(f"AI provider error: {exc}") from exc
     text = "".join(b.text for b in resp.content if b.type == "text")
-    return _parse_json(text)
+    try:
+        return _parse_json(text)
+    except ValueError as exc:
+        raise SourceDocError(str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -133,8 +178,11 @@ def _retrieve_context(visit: dict, study_id: Optional[str]) -> str:
     if not query:
         return ""
     hits = docstore.search(query, study_id=study_id, limit=4)
-    return "\n\n".join(
-        f"[{h.get('section') or h.get('title')}] {h['content']}" for h in hits)
+    # Cap per-hit and overall length so prompts (and thus JSON replies) stay
+    # bounded and don't get truncated at the token limit.
+    parts = [f"[{h.get('section') or h.get('title')}] {h['content'][:800]}"
+             for h in hits]
+    return "\n\n".join(parts)[:4000]
 
 
 def _activity_list(visit: dict) -> List[str]:
@@ -242,12 +290,28 @@ def _run_pipeline(state: Dict[str, Any]) -> Dict[str, Any]:
 
 def generate_for_visit(visit_doc: dict, study_id: Optional[str],
                        max_iterations: int) -> dict:
-    """Run the agent pipeline for one assembled visit skeleton."""
-    final = _run_pipeline({
-        "visit": visit_doc, "study_id": study_id,
-        "iterations": 0, "max_iterations": max_iterations,
-        "protocol_context": None,
-    })
+    """Run the agent pipeline for one assembled visit skeleton.
+
+    A per-visit ``SourceDocError`` (e.g. the model returned unusable JSON) is
+    caught and surfaced on that visit rather than failing the whole batch -- the
+    deterministic skeleton is always returned.
+    """
+    try:
+        final = _run_pipeline({
+            "visit": visit_doc, "study_id": study_id,
+            "iterations": 0, "max_iterations": max_iterations,
+            "protocol_context": None,
+        })
+    except SourceDocError as exc:
+        return {
+            "visit": visit_doc.get("visit"),
+            "skeleton": visit_doc,
+            "generated": None,
+            "critique": {"aligned": False, "issues": [f"generation error: {exc}"]},
+            "iterations": 0,
+            "approved": False,
+            "error": str(exc),
+        }
     critique = final.get("critique") or {}
     return {
         "visit": visit_doc.get("visit"),

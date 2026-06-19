@@ -250,6 +250,8 @@ with tab_src:
                 st.error(str(e))
             except sourcedoc_agents.SourceDocNotConfigured as e:
                 st.warning(str(e))
+            except Exception as e:  # never surface a raw traceback to the user
+                st.error(f'Generation failed: {e}')
 
 
 # ===========================================================================

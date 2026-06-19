@@ -139,3 +139,36 @@ def test_unknown_visit_rejected(monkeypatch):
     monkeypatch.setattr(sda, "_call_llm", fake)
     with pytest.raises(ValueError):
         sda.generate_source_documents(_schedule(), visit_name="Nonexistent")
+
+
+# --- robust JSON parsing + graceful degradation ----------------------------
+def test_parse_json_plain():
+    assert sda._parse_json('{"aligned": true}') == {"aligned": True}
+
+
+def test_parse_json_strips_code_fence():
+    assert sda._parse_json('```json\n{"a": 1}\n```') == {"a": 1}
+
+
+def test_parse_json_ignores_trailing_prose():
+    out = sda._parse_json('Here is the result:\n{"a": 1, "b": [2, 3]}\nThanks!')
+    assert out == {"a": 1, "b": [2, 3]}
+
+
+def test_parse_json_truncated_raises_clean_error():
+    # A reply cut off mid-object (the original "Expecting ',' delimiter" cause).
+    with pytest.raises(ValueError):
+        sda._parse_json('{"fields": [{"label": "BP", "kind": "workshe')
+
+
+def test_generate_for_visit_degrades_on_bad_json(monkeypatch):
+    def boom(system, prompt):
+        raise sda.SourceDocError("model did not return valid JSON")
+    monkeypatch.setattr(sda, "_call_llm", boom)
+
+    out = sda.generate_for_visit(_skeleton(), study_id=None, max_iterations=2)
+    assert out["approved"] is False
+    assert out["generated"] is None
+    assert "error" in out
+    # The deterministic skeleton is still returned intact.
+    assert out["skeleton"]["activity_count"] == 2
