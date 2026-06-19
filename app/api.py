@@ -9,7 +9,7 @@ from .ingestion import ingest_uploaded_file
 from .schemas import FinalSchedule
 from .exporter import export_csv, export_xlsx
 from .store import init_db
-from . import compliance, dispatch, chat, auth, deid, audit, rbac, studies, docstore, assembler, scheduling
+from . import compliance, dispatch, chat, auth, deid, audit, rbac, studies, docstore, assembler, scheduling, sourcedoc_agents
 
 app = FastAPI(title='Clinical Research Platform', version='2.0.0')
 graph = build_graph()
@@ -26,6 +26,7 @@ app.include_router(compliance.router, dependencies=_gate)
 app.include_router(dispatch.router, dependencies=_gate)
 app.include_router(studies.router, dependencies=_gate)
 app.include_router(scheduling.router, dependencies=_gate)
+app.include_router(sourcedoc_agents.router, dependencies=_gate)
 app.include_router(chat.router, dependencies=_gate)
 app.include_router(audit.router, dependencies=_gate)
 
