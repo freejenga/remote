@@ -183,3 +183,62 @@ A `Dockerfile` runs the API (`uvicorn app.api:app` on port 8000) and
 - This is a starter product, not validated GxP software.
 - Complex scanned PDFs may need OCR before parsing.
 - Complex SoA layouts and nuanced footnotes are only partly handled.
+
+## Developer setup (quick)
+These steps get a developer up and running locally (venv, dev deps, linters, tests, frontend).
+
+### Prereqs
+- Python 3.12+ (3.12 recommended)
+- Node.js 18+ (for the web UI)
+- git
+
+### Windows (PowerShell)
+```powershell
+# create & activate venv
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+# install pre-commit and enable hooks
+pip install pre-commit
+pre-commit install
+# frontend
+cd web
+npm ci
+cd ..
+```
+
+### macOS / Linux
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+pip install pre-commit
+pre-commit install
+cd web
+npm ci
+cd ..
+```
+
+### Common commands
+- Format & lint (Python): `./format.ps1` (Windows) or `./format.sh` (Unix)
+- Lint & fix (web): `npm run lint --prefix web` and `npm run lint:fix --prefix web`
+- Run Python tests: `pytest -q`
+- Run frontend tests: `npm test --prefix web`
+- Run API: `python main.py` (then visit http://localhost:8000/docs)
+- Run UI: `streamlit run app/ui.py`
+- Generate coverage locally: `pytest --cov=./ --cov-report=xml:coverage.xml --cov-report=html:htmlcov`
+
+### Git & CI
+- Add remote & push:
+  `git remote add origin https://github.com/<owner>/<repo>.git && git push -u origin master`
+- CI: `.github/workflows/ci.yml` runs format/lint/tests and uploads coverage artifacts on push.
+
+### Notes for contributors
+- Run `pre-commit run --all-files` before committing; hooks enforce ruff/isort/black for Python and eslint/prettier for web when applicable.
+- If network-restricted, run as much locally as possible; CI will still run on push and publish coverage artifacts.
+
+If you'd like, add a CONTRIBUTING.md or a small developer checklist; happy to scaffold one.
