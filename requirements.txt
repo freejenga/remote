@@ -7,6 +7,7 @@ pandas>=2.0
 openpyxl>=3.1
 python-multipart>=0.0.9
 PyPDF2>=3.0
+pdfplumber>=0.11         # structure-aware PDF tables; falls back to PyPDF2 if absent
 python-docx>=1.1
 streamlit>=1.40
 
@@ -19,3 +20,4 @@ pytest>=8.0
 httpx>=0.27               # used by FastAPI TestClient
 
 # Optional OCR for scanned PDFs: see requirements-ocr.txt (needs the Tesseract binary)
+# Optional local semantic search (RAG hybrid retrieval): see requirements-embeddings.txt

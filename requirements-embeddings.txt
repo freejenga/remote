@@ -1,0 +1,12 @@
+# Optional local semantic-search dependencies for hybrid RAG retrieval.
+# Install with: pip install -r requirements-embeddings.txt
+#
+# Then enable at runtime (off by default — the app uses TF-IDF without it):
+#   PLATFORM_EMBEDDINGS=1
+# Optionally override the model (default BAAI/bge-small-en-v1.5):
+#   PLATFORM_EMBED_MODEL=BAAI/bge-small-en-v1.5
+#
+# Local-only: the model runs on this machine. First load downloads the model
+# into the HuggingFace cache once; thereafter it is fully offline. De-identified
+# chunk text never leaves the box.
+sentence-transformers>=3.0

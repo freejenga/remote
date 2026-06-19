@@ -26,7 +26,7 @@ from . import crypto
 DB_FILE = os.environ.get('PLATFORM_DB', 'clinical_platform.db')
 
 # Increment this constant whenever a new migration step is added below.
-_SCHEMA_VERSION = 4
+_SCHEMA_VERSION = 5
 
 
 @contextmanager
@@ -159,12 +159,45 @@ def _migrate_v3_to_v4(c) -> None:
     )
 
 
+def _migrate_v4_to_v5(c) -> None:
+    """Upgrade the knowledge base for table-aware, hybrid retrieval.
+
+    Two additions, both backward-compatible with the v4 RAG layer:
+
+    * ``doc_chunks.section`` — a label (e.g. "Inclusion Criteria", "Schedule of
+      Events") attached at ingest by section-aware chunking, so retrieval can
+      surface *which* part of a protocol a passage came from. Existing rows keep
+      NULL and behave exactly as before.
+    * ``doc_vectors`` — optional per-chunk embedding vectors (float32 blob) for
+      semantic search. Populated only when local embeddings are enabled; when
+      empty, retrieval transparently falls back to TF-IDF. Vectors are computed
+      over the *already de-identified* chunk text, so the boundary is unchanged.
+    """
+    # Idempotent ADD COLUMN: tolerate re-runs / partial upgrades.
+    cols = {r[1] for r in c.execute('PRAGMA table_info(doc_chunks)').fetchall()}
+    if 'section' not in cols:
+        c.execute('ALTER TABLE doc_chunks ADD COLUMN section TEXT')
+    c.execute(
+        'CREATE TABLE IF NOT EXISTS doc_vectors '
+        '(chunk_id TEXT PRIMARY KEY, doc_id TEXT NOT NULL, study_id TEXT, '
+        'dim INTEGER, model TEXT, vector BLOB, created_at TEXT)'
+    )
+    # Vectors are loaded/deleted alongside their parent document.
+    c.execute(
+        'CREATE INDEX IF NOT EXISTS idx_doc_vectors_doc ON doc_vectors (doc_id)'
+    )
+    c.execute(
+        'CREATE INDEX IF NOT EXISTS idx_doc_vectors_study ON doc_vectors (study_id)'
+    )
+
+
 # Ordered list of (from_version, migration_function) pairs.
 _MIGRATIONS = [
     (0, _migrate_v0_to_v1),
     (1, _migrate_v1_to_v2),
     (2, _migrate_v2_to_v3),
     (3, _migrate_v3_to_v4),
+    (4, _migrate_v4_to_v5),
 ]
 
 

@@ -1,9 +1,9 @@
-import "./globals.css";
-import Link from "next/link";
+import './globals.css';
+import Link from 'next/link';
 
 export const metadata = {
-  title: "Clinical Research Platform",
-  description: "Unified protocol, compliance, dispatch, and AI assistant",
+  title: 'Clinical Research Platform',
+  description: 'Unified protocol, compliance, dispatch, and AI assistant',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
