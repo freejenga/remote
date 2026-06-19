@@ -26,7 +26,7 @@ from . import crypto
 DB_FILE = os.environ.get('PLATFORM_DB', 'clinical_platform.db')
 
 # Increment this constant whenever a new migration step is added below.
-_SCHEMA_VERSION = 6
+_SCHEMA_VERSION = 7
 
 
 @contextmanager
@@ -222,6 +222,29 @@ def _migrate_v5_to_v6(c) -> None:
     c.execute('CREATE INDEX IF NOT EXISTS idx_sv_subject ON subject_visits (subject_id)')
 
 
+def _migrate_v6_to_v7(c) -> None:
+    """Add the financial layer: study budget items + event->billing mapping.
+
+    ``budget_items`` is the parsed study budget (one row per billable line);
+    ``event_billing_map`` links a Schedule-of-Events activity (by normalized
+    name) to a budget item, either auto-matched or manually overridden. The
+    reconciliation in ``app.billing`` joins these against ``subject_visits`` to
+    compute completed/missed/pending billing -- pure code, no LLM.
+    """
+    c.execute(
+        'CREATE TABLE IF NOT EXISTS budget_items '
+        '(id TEXT PRIMARY KEY, study_id TEXT NOT NULL, item_name TEXT, '
+        'normalized_name TEXT, unit_cost REAL, category TEXT, created_at TEXT)'
+    )
+    c.execute(
+        'CREATE TABLE IF NOT EXISTS event_billing_map '
+        '(id TEXT PRIMARY KEY, study_id TEXT NOT NULL, activity TEXT, '
+        'normalized_activity TEXT, budget_item_id TEXT, source TEXT, created_at TEXT)'
+    )
+    c.execute('CREATE INDEX IF NOT EXISTS idx_budget_study ON budget_items (study_id)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_ebm_study ON event_billing_map (study_id)')
+
+
 # Ordered list of (from_version, migration_function) pairs.
 _MIGRATIONS = [
     (0, _migrate_v0_to_v1),
@@ -230,6 +253,7 @@ _MIGRATIONS = [
     (3, _migrate_v3_to_v4),
     (4, _migrate_v4_to_v5),
     (5, _migrate_v5_to_v6),
+    (6, _migrate_v6_to_v7),
 ]
 
 

@@ -21,9 +21,9 @@ SAMPLE = open(
 
 def test_schema_version_is_current():
     from app.store import get_conn, _SCHEMA_VERSION
-    assert _SCHEMA_VERSION == 6
+    assert _SCHEMA_VERSION == 7
     with get_conn() as conn:
-        assert conn.execute('PRAGMA user_version').fetchone()[0] == 6
+        assert conn.execute('PRAGMA user_version').fetchone()[0] == 7
 
 
 def test_studies_tables_exist():
