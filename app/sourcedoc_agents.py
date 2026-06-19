@@ -24,7 +24,7 @@ already-de-identified docstore corpus, so the de-identification boundary holds.
 import json
 import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypedDict
 
 from fastapi import APIRouter, HTTPException
 
@@ -41,6 +41,19 @@ router = APIRouter(prefix="/source-documents", tags=["source-documents"])
 
 # Bound on the generation<->critic revision loop.
 DEFAULT_MAX_ITERATIONS = 2
+
+
+class _SDState(TypedDict, total=False):
+    """Pipeline state. A typed schema so langgraph *merges* each node's partial
+    return (rather than replacing the whole state, as an untyped dict graph does)."""
+    visit: dict
+    study_id: Optional[str]
+    iterations: int
+    max_iterations: int
+    protocol_context: Optional[str]
+    draft: dict
+    formatted: dict
+    critique: dict
 
 _GEN_SYSTEM = (
     "You are the GENERATION agent for clinical-trial source documents. Given a "
@@ -198,7 +211,7 @@ _graph_cache = None
 
 
 def _build_graph():
-    g = StateGraph(dict)
+    g = StateGraph(_SDState)
     g.add_node("generate", generation_agent)
     g.add_node("format", formatting_agent)
     g.add_node("critic", critic_agent)
