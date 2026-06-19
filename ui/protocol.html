@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protocol Agent · Clinical Research Platform</title>
+    <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23fde047" stroke="%23ec4899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>'>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; font-family: system-ui, -apple-system, sans-serif; }
+        .glass { background: rgba(255, 255, 255, 0.25); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.18); }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        .toast-enter { animation: slideIn 0.3s ease forwards; }
+        .toast-exit { animation: fadeOut 0.3s ease forwards; }
+        input, textarea, select { color-scheme: dark; }
+        @media print {
+            body, html { background: white !important; color: black !important; min-height: auto !important; }
+            .glass { background: none !important; border: none !important; backdrop-filter: none !important; box-shadow: none !important; }
+            .no-print { display: none !important; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color: black !important; }
+            th, td { border: 1px solid #999 !important; }
+        }
+    </style>
+</head>
+<body class="text-white pb-12">
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 w-80 max-w-[90vw] no-print"></div>
+
+    <div class="container mx-auto px-4 py-8 max-w-5xl">
+        <div class="glass rounded-2xl p-6 md:p-8 shadow-2xl">
+            <!-- Header -->
+            <div class="flex items-center gap-3 mb-8 no-print">
+                <a href="/ui/index.html" class="p-2 rounded-lg hover:bg-white/10" title="Home"><i data-lucide="arrow-left" class="w-5 h-5"></i></a>
+                <i data-lucide="file-text" class="w-8 h-8 text-yellow-300"></i>
+                <h1 class="text-2xl md:text-3xl font-bold bg-gradient-to-r from-yellow-300 to-pink-300 bg-clip-text text-transparent" style="-webkit-text-fill-color: inherit;">Protocol Agent</h1>
+            </div>
+
+            <!-- Input -->
+            <div class="no-print">
+                <div class="flex gap-1 bg-white/10 rounded-lg p-1 mb-4 text-sm max-w-md">
+                    <button type="button" id="srcTab-text" onclick="setSource('text')" class="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md font-semibold bg-white/30"><i data-lucide="clipboard-type" class="w-4 h-4"></i> Paste text</button>
+                    <button type="button" id="srcTab-file" onclick="setSource('file')" class="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md font-semibold hover:bg-white/10"><i data-lucide="upload" class="w-4 h-4"></i> Upload file</button>
+                </div>
+
+                <div id="srcPanel-text">
+                    <textarea id="protocolText" class="w-full px-4 py-3 bg-white/10 rounded-lg outline-none focus:bg-white/20 h-48" placeholder="Paste protocol text (Schedule of Activities table and/or narrative)…"></textarea>
+                    <button onclick="loadSample()" class="mt-2 text-xs text-yellow-200 hover:text-yellow-100 flex items-center gap-1"><i data-lucide="sparkles" class="w-3 h-3"></i> Load sample protocol</button>
+                </div>
+
+                <div id="srcPanel-file" class="hidden">
+                    <label for="protocolFile" class="flex flex-col items-center justify-center gap-2 w-full h-48 border-2 border-dashed border-white/30 rounded-lg cursor-pointer hover:bg-white/5">
+                        <i data-lucide="file-up" class="w-9 h-9 text-pink-300"></i>
+                        <span id="protocolFileName" class="text-sm text-white/70">Click to choose a file</span>
+                        <span class="text-xs text-white/40">PDF · Word (.docx) · Excel (.xlsx) · CSV · TXT</span>
+                    </label>
+                    <input type="file" id="protocolFile" accept=".pdf,.docx,.xlsx,.csv,.txt" class="hidden" onchange="document.getElementById('protocolFileName').textContent = this.files[0]?.name || 'Click to choose a file'">
+                </div>
+
+                <div class="flex flex-wrap gap-3 mt-5">
+                    <button id="parseBtn" onclick="parseProtocol()" class="flex items-center gap-2 px-6 py-3 bg-green-500 hover:bg-green-600 rounded-lg font-semibold"><i data-lucide="zap" class="w-5 h-5"></i> Parse Protocol</button>
+                    <button onclick="clearResults()" class="flex items-center gap-2 px-5 py-3 bg-white/10 hover:bg-white/20 rounded-lg"><i data-lucide="eraser" class="w-4 h-4"></i> Clear</button>
+                </div>
+            </div>
+
+            <!-- Results -->
+            <div id="results" class="hidden mt-8">
+                <!-- summary -->
+                <div class="flex items-center justify-between flex-wrap gap-3 mb-6 border-b border-white/10 pb-4">
+                    <div class="flex items-center gap-4 flex-wrap">
+                        <span class="flex items-center gap-2"><i data-lucide="calendar-days" class="w-5 h-5 text-blue-300"></i><b id="statVisits">0</b> visits</span>
+                        <span class="flex items-center gap-2"><i data-lucide="list-checks" class="w-5 h-5 text-green-300"></i><b id="statRows">0</b> activities</span>
+                        <span id="statConflictsWrap" class="flex items-center gap-2"><i data-lucide="alert-triangle" class="w-5 h-5 text-red-300"></i><b id="statConflicts">0</b> conflicts</span>
+                    </div>
+                    <div class="flex items-center gap-2 no-print">
+                        <button onclick="exportSchedule('xlsx')" class="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 rounded-lg text-sm font-semibold"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Excel</button>
+                        <button onclick="exportSchedule('csv')" class="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm font-semibold"><i data-lucide="file-down" class="w-4 h-4"></i> CSV</button>
+                        <button onclick="window.print()" class="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm"><i data-lucide="printer" class="w-4 h-4"></i> Print</button>
+                    </div>
+                </div>
+
+                <!-- conflicts -->
+                <div id="conflictsPanel" class="hidden mb-6"></div>
+
+                <!-- tabs -->
+                <div class="flex gap-1 bg-white/10 rounded-lg p-1 mb-5 text-sm max-w-md no-print">
+                    <button id="vtab-schedule" onclick="showView('schedule')" class="flex-1 px-4 py-2 rounded-md font-semibold bg-white/30">Visit Schedule</button>
+                    <button id="vtab-table" onclick="showView('table')" class="flex-1 px-4 py-2 rounded-md font-semibold hover:bg-white/10">Operational Table</button>
+                </div>
+
+                <div id="view-schedule"></div>
+                <div id="view-table" class="hidden overflow-x-auto"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+        let parsed = null, source = 'text';
+
+        function toast(msg, kind='info') {
+            const colors = { info:'bg-blue-500', success:'bg-green-500', error:'bg-red-500' };
+            const el = document.createElement('div');
+            el.className = `toast-enter ${colors[kind]} text-white px-4 py-3 rounded-lg shadow-lg text-sm`;
+            el.textContent = msg;
+            document.getElementById('toast-container').appendChild(el);
+            setTimeout(() => { el.classList.add('toast-exit'); setTimeout(() => el.remove(), 300); }, 3500);
+        }
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+        function setSource(s) {
+            source = s;
+            const on='bg-white/30', off='hover:bg-white/10';
+            document.getElementById('srcTab-text').className = `flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md font-semibold ${s==='text'?on:off}`;
+            document.getElementById('srcTab-file').className = `flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md font-semibold ${s==='file'?on:off}`;
+            document.getElementById('srcPanel-text').classList.toggle('hidden', s!=='text');
+            document.getElementById('srcPanel-file').classList.toggle('hidden', s!=='file');
+            lucide.createIcons();
+        }
+
+        async function loadSample() {
+            try { const r = await fetch('/ui/sample_protocol.txt'); if (r.ok) { document.getElementById('protocolText').value = await r.text(); toast('Sample loaded', 'success'); } else { toast('Sample not found', 'error'); } }
+            catch { toast('Could not load sample', 'error'); }
+        }
+
+        function showView(v) {
+            document.getElementById('vtab-schedule').className = `flex-1 px-4 py-2 rounded-md font-semibold ${v==='schedule'?'bg-white/30':'hover:bg-white/10'}`;
+            document.getElementById('vtab-table').className = `flex-1 px-4 py-2 rounded-md font-semibold ${v==='table'?'bg-white/30':'hover:bg-white/10'}`;
+            document.getElementById('view-schedule').classList.toggle('hidden', v!=='schedule');
+            document.getElementById('view-table').classList.toggle('hidden', v!=='table');
+        }
+
+        function clearResults() {
+            parsed = null;
+            document.getElementById('results').classList.add('hidden');
+            document.getElementById('protocolText').value = '';
+            document.getElementById('protocolFile').value = '';
+            document.getElementById('protocolFileName').textContent = 'Click to choose a file';
+        }
+
+        async function parseProtocol() {
+            const btn = document.getElementById('parseBtn');
+            btn.disabled = true; btn.innerHTML = '<i data-lucide="loader" class="w-5 h-5 animate-spin"></i> Parsing…'; lucide.createIcons();
+            try {
+                let res;
+                if (source === 'file') {
+                    const f = document.getElementById('protocolFile').files[0];
+                    if (!f) { toast('Please choose a file', 'error'); return; }
+                    const fd = new FormData(); fd.append('file', f);
+                    res = await fetch('/parse-file', { method: 'POST', body: fd });
+                } else {
+                    const text = document.getElementById('protocolText').value.trim();
+                    if (!text) { toast('Please paste protocol text', 'error'); return; }
+                    const fd = new FormData(); fd.append('protocol_text', text);
+                    res = await fetch('/parse-text', { method: 'POST', body: fd });
+                }
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.detail || `Parse failed (${res.status})`);
+                parsed = data;
+                renderResults(data);
+                toast('Protocol parsed', 'success');
+            } catch (e) { toast(e.message, 'error'); }
+            finally { btn.disabled = false; btn.innerHTML = '<i data-lucide="zap" class="w-5 h-5"></i> Parse Protocol'; lucide.createIcons(); }
+        }
+
+        function renderResults(d) {
+            document.getElementById('results').classList.remove('hidden');
+            document.getElementById('statVisits').textContent = d.visits.length;
+            document.getElementById('statRows').textContent = d.flat_rows.length;
+            document.getElementById('statConflicts').textContent = d.conflicts.length;
+            document.getElementById('statConflictsWrap').style.opacity = d.conflicts.length ? '1' : '0.5';
+
+            // conflicts
+            const cp = document.getElementById('conflictsPanel');
+            if (d.conflicts.length) {
+                const sevColor = { error:'bg-red-500/20 border-red-400/40', warning:'bg-yellow-500/20 border-yellow-400/40', info:'bg-blue-500/20 border-blue-400/40' };
+                cp.classList.remove('hidden');
+                cp.innerHTML = `<h3 class="font-semibold mb-2 flex items-center gap-2"><i data-lucide="alert-triangle" class="w-5 h-5 text-red-300"></i> Conflicts</h3>` +
+                    d.conflicts.map(c => `<div class="border ${sevColor[c.severity]||sevColor.info} rounded-lg p-3 mb-2 text-sm">
+                        <span class="uppercase text-xs font-bold tracking-wide">${esc(c.severity)}</span> · <b>${esc(c.code)}</b>
+                        ${c.visit_name ? `<span class="text-white/60"> — ${esc(c.visit_name)}${c.activity_name ? ' / ' + esc(c.activity_name) : ''}</span>` : ''}
+                        <div class="text-white/80 mt-1">${esc(c.message)}</div></div>`).join('');
+            } else {
+                cp.classList.add('hidden');
+            }
+
+            // schedule (visit cards)
+            document.getElementById('view-schedule').innerHTML = d.visits.map(v => `
+                <div class="glass rounded-xl p-4 mb-3">
+                    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+                        <h4 class="text-lg font-semibold flex items-center gap-2"><i data-lucide="calendar" class="w-4 h-4 text-blue-300"></i> ${esc(v.name)}</h4>
+                        <div class="text-xs text-white/60 flex gap-3">
+                            ${v.day != null ? `<span>Day ${esc(v.day)}</span>` : ''}
+                            ${v.window ? `<span>Window: ${esc(v.window)}</span>` : ''}
+                            ${v.cycle_group ? `<span>${esc(v.cycle_group)}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        ${v.procedures.map(p => `<span class="px-3 py-1.5 bg-white/10 rounded-lg text-sm flex items-center gap-1.5" title="source: ${esc(p.source?.parser_route||'')}">
+                            ${esc(p.name)}${p.conditional ? `<span class="text-yellow-300 text-xs">(${esc(p.conditional)})</span>` : ''}
+                            <span class="w-2 h-2 rounded-full ${p.source?.parser_route==='soa'?'bg-green-400':p.source?.parser_route==='narrative'?'bg-blue-400':'bg-purple-400'}"></span>
+                        </span>`).join('') || '<span class="text-white/40 text-sm">no procedures</span>'}
+                    </div>
+                </div>`).join('');
+
+            // operational table
+            const cols = ['visit','cycle','activity','normalized','order','form','system','condition','source'];
+            document.getElementById('view-table').innerHTML = `
+                <table class="w-full text-sm border-collapse">
+                    <thead><tr class="text-left border-b border-white/20">
+                        ${cols.map(c => `<th class="py-2 px-3 capitalize">${c}</th>`).join('')}
+                    </tr></thead>
+                    <tbody>
+                        ${d.flat_rows.map(r => `<tr class="border-b border-white/10 hover:bg-white/5">
+                            ${cols.map(c => `<td class="py-2 px-3">${esc(r[c] ?? '')}</td>`).join('')}
+                        </tr>`).join('')}
+                    </tbody>
+                </table>`;
+            showView('schedule');
+            lucide.createIcons();
+        }
+
+        async function exportSchedule(fmt) {
+            if (!parsed) { toast('Parse a protocol first', 'error'); return; }
+            try {
+                const res = await fetch(`/export-schedule?fmt=${fmt}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(parsed),
+                });
+                if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail || `Export failed (${res.status})`); }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fmt === 'csv' ? 'protocol_rows.csv' : 'protocol_review.xlsx';
+                document.body.appendChild(a); a.click(); a.remove();
+                URL.revokeObjectURL(url);
+                toast(`Exported ${fmt.toUpperCase()}`, 'success');
+            } catch (e) { toast(e.message, 'error'); }
+        }
+    </script>
+</body>
+</html>

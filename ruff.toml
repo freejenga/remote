@@ -1,0 +1,7 @@
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+exclude = ["node_modules", ".venv", "venv", "build", "dist", "__pycache__"]
+
+[tool.ruff.per-file-ignores]
+"*/__init__.py" = ["F401"]

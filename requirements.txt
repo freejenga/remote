@@ -1,0 +1,21 @@
+# Core API + pipeline
+fastapi>=0.115
+uvicorn>=0.30
+pydantic>=2.7
+langgraph>=0.2            # optional at runtime — app falls back to a linear runner if absent
+pandas>=2.0
+openpyxl>=3.1
+python-multipart>=0.0.9
+PyPDF2>=3.0
+python-docx>=1.1
+streamlit>=1.40
+
+# AI chat + security
+anthropic>=0.40
+cryptography>=42
+
+# Dev / test
+pytest>=8.0
+httpx>=0.27               # used by FastAPI TestClient
+
+# Optional OCR for scanned PDFs: see requirements-ocr.txt (needs the Tesseract binary)

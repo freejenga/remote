@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2026 Medication Compliance Tracker</title>
+    <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23fde047" stroke="%23ec4899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg>'>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; font-family: system-ui, -apple-system, sans-serif; }
+        .glass { background: rgba(255, 255, 255, 0.25); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.18); }
+        .tab-active { background: rgba(255, 255, 255, 0.3); border-bottom: 2px solid white; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        .toast-enter { animation: slideIn 0.3s ease forwards; }
+        .toast-exit { animation: fadeOut 0.3s ease forwards; }
+        
+        /* Print Styles */
+        @media print {
+            body, html { background: white !important; color: black !important; height: auto !important; min-height: auto !important; overflow: visible !important; }
+            .container { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
+            .glass { background: none !important; box-shadow: none !important; border: none !important; backdrop-filter: none !important; padding: 0 !important; }
+            .no-print { display: none !important; }
+            .print-break-inside-avoid { break-inside: avoid; page-break-inside: avoid; margin-bottom: 1rem; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color: black !important; }
+            .bg-green-500\/20 { background-color: #dcfce7 !important; border: 1px solid #166534 !important; }
+            .bg-red-500\/20 { background-color: #fee2e2 !important; border: 1px solid #991b1b !important; }
+            #visitLog, .overflow-y-auto, .max-h-\[600px\] { max-height: none !important; height: auto !important; overflow: visible !important; }
+        }
+    </style>
+</head>
+<body class="text-white pb-12">
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 w-80 max-w-[90vw] no-print"></div>
+
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <div class="glass rounded-2xl p-6 md:p-8 shadow-2xl">
+            <div class="flex items-center justify-center gap-3 mb-8">
+                <i data-lucide="pill" class="w-8 h-8 text-yellow-300"></i>
+                <h1 class="text-3xl md:text-4xl font-bold text-center bg-gradient-to-r from-yellow-300 to-pink-300 bg-clip-text text-transparent" style="-webkit-text-fill-color: inherit;">
+                    Clinical Compliance Tracker
+                </h1>
+            </div>
+
+            <div class="flex justify-center mb-8 no-print">
+                <div class="hidden md:flex space-x-1 bg-white/10 rounded-lg p-1 w-full max-w-lg">
+                    <button onclick="switchTab('reports')" id="tab-btn-reports" class="tab-active flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold hover:bg-white/20"><i data-lucide="file-plus" class="w-4 h-4"></i> Reports</button>
+                    <button onclick="switchTab('history')" id="tab-btn-history" class="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold hover:bg-white/20"><i data-lucide="history" class="w-4 h-4"></i> Visit Log</button>
+                    <button onclick="switchTab('saved')" id="tab-btn-saved" class="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold hover:bg-white/20"><i data-lucide="users" class="w-4 h-4"></i> Subjects</button>
+                </div>
+            </div>
+
+            <div id="reports-content" class="tab-content block">
+                <div class="grid md:grid-cols-2 gap-8 no-print">
+                    <div class="space-y-4">
+                        <h2 class="text-xl font-semibold mb-4 flex items-center gap-2"><i data-lucide="user" class="w-5 h-5 text-pink-300"></i> Subject Info</h2>
+                        <datalist id="clinical-subjects"></datalist>
+                        <div class="relative">
+                            <label for="subjectId" class="block text-sm mb-1">Subject ID <span class="text-xs text-yellow-300 ml-2 italic">(Select to auto-fill)</span></label>
+                            <input type="text" id="subjectId" list="clinical-subjects" onchange="autoFillSubjectInfo()" class="w-full px-4 py-3 bg-white/10 rounded-lg outline-none focus:bg-white/20 font-bold text-blue-200" placeholder="e.g. SUBJ-0010">
+                        </div>
+                        <div><label for="visitNumber" class="block text-sm mb-1">Visit Number</label><input type="number" id="visitNumber" class="w-full px-4 py-3 bg-white/10 rounded-lg outline-none focus:bg-white/20"></div>
+                        <div><label for="study" class="block text-sm mb-1">Medication Protocol</label><input type="text" id="study" class="w-full px-4 py-3 bg-white/10 rounded-lg outline-none focus:bg-white/20"></div>
+                    </div>
+                    <div class="space-y-4">
+                        <h2 class="text-xl font-semibold mb-4 flex items-center gap-2"><i data-lucide="activity" class="w-5 h-5 text-green-300"></i> Metrics</h2>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="dosesPerDay" class="block text-sm mb-1">Doses per Day</label>
+                                <select id="dosesPerDay" class="w-full px-4 py-3 bg-white/10 rounded-lg outline-none focus:bg-white/20">
+                                    <option value="1" class="text-gray-900">1 Pill / Day</option>
+                                    <option value="2" class="text-gray-900">2 Pills / Day</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="totalDispensed" class="block text-sm mb-1">Total Dispensed</label>
+                                <select id="totalDispensed" class="w-full px-4 py-3 bg-white/10 rounded-lg outline-none focus:bg-white/20">
+                                    <option value="30" class="text-gray-900">30 Pills</option>
+                                    <option value="60" class="text-gray-900">60 Pills</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="daysElapsed" class="block text-sm mb-1">Actual Days Elapsed</label>
+                                <input type="number" min="1" id="daysElapsed" class="w-full px-4 py-3 bg-white/10 rounded-lg outline-none focus:bg-white/20" placeholder="e.g. 14">
+                            </div>
+                            <div>
+                                <label for="pillsRemaining" class="block text-sm mb-1">Remaining in Bottle</label>
+                                <input type="number" min="0" max="60" id="pillsRemaining" class="w-full px-4 py-3 bg-white/10 rounded-lg outline-none focus:bg-white/20" placeholder="e.g. 32">
+                            </div>
+                        </div>
+                        <div><label for="complianceNotes" class="block text-sm mb-1">Notes</label><textarea id="complianceNotes" class="w-full px-4 py-3 bg-white/10 rounded-lg outline-none focus:bg-white/20 h-20"></textarea></div>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-4 mt-8 justify-center no-print">
+                    <button onclick="generateCompliance()" class="flex items-center gap-2 px-8 py-3 bg-green-500 hover:bg-green-600 rounded-lg font-semibold"><i data-lucide="zap" class="w-5 h-5"></i> Generate Report</button>
+                    <button onclick="saveCurrentReport()" id="saveBtn" class="flex items-center gap-2 px-8 py-3 bg-purple-500 hover:bg-purple-600 rounded-lg font-semibold hidden"><i data-lucide="save" class="w-5 h-5"></i> Save Record</button>
+                </div>
+
+                <div id="results" class="mt-8 bg-black/20 rounded-xl hidden print-break-inside-avoid">
+                    <div class="p-6">
+                        <div class="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+                            <h3 class="text-xl font-semibold">Generated Report</h3>
+                            <div class="flex items-center gap-4">
+                                <button onclick="window.print()" class="no-print flex items-center gap-2 px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-sm border border-white/20"><i data-lucide="printer" class="w-4 h-4"></i> Print</button>
+                                <span id="resStatusBadge" class="px-3 py-1 rounded-full text-sm font-bold"></span>
+                            </div>
+                        </div>
+                        <div id="reportContent" class="space-y-2"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="history-content" class="tab-content hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-semibold">Visit History</h2>
+                    <button onclick="window.print()" class="no-print flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-semibold"><i data-lucide="printer" class="w-4 h-4"></i> Print Log</button>
+                </div>
+                <div id="visitLog" class="space-y-4 max-h-[600px] overflow-y-auto pr-2"></div>
+            </div>
+
+            <div id="saved-content" class="tab-content hidden">
+                <div class="mb-8 p-6 bg-indigo-900/80 rounded-xl border border-indigo-400/50 no-print">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+                        <div>
+                            <h2 class="text-xl font-bold flex items-center gap-2 text-indigo-300">
+                                <i data-lucide="clock" class="w-5 h-5"></i> Simulation Engine
+                            </h2>
+                            <p class="text-sm text-indigo-200/70 mt-1">App Date: <strong id="simDateDisplay" class="text-white font-mono text-base ml-1 border-b border-indigo-400/50 pb-1"></strong></p>
+                        </div>
+                        <div class="flex gap-2 flex-wrap">
+                            <button onclick="window.loadTargetSubjects()" class="flex items-center gap-2 px-3 py-2 bg-blue-500/80 hover:bg-blue-500 text-white rounded-lg text-sm font-semibold shadow-lg shadow-blue-500/20"><i data-lucide="download" class="w-4 h-4"></i> Load Concomitant</button>
+                            <button onclick="autoSeedSubjects()" class="flex items-center gap-2 px-3 py-2 bg-indigo-500/30 hover:bg-indigo-500/50 border border-indigo-400/50 rounded-lg text-sm font-semibold"><i data-lucide="user-plus" class="w-4 h-4"></i> Random Subjects</button>
+                            <button onclick="resetSimulation()" class="flex items-center gap-2 px-3 py-2 bg-red-500/80 hover:bg-red-500 text-white rounded-lg text-sm font-semibold shadow-lg shadow-red-500/20 border border-red-400/50"><i data-lucide="rotate-ccw" class="w-4 h-4"></i> Reset</button>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <button onclick="advanceTime(1)" class="py-3 bg-black/30 hover:bg-black/50 border border-white/10 rounded-lg text-sm font-bold transition-all hover:scale-105">+1 Day</button>
+                        <button onclick="advanceTime(7)" class="py-3 bg-black/30 hover:bg-black/50 border border-white/10 rounded-lg text-sm font-bold transition-all hover:scale-105">+1 Week</button>
+                        <button onclick="advanceTime(14)" class="py-3 bg-black/30 hover:bg-black/50 border border-white/10 rounded-lg text-sm font-bold transition-all hover:scale-105">+2 Weeks</button>
+                        <button onclick="advanceTime(30)" class="py-3 bg-black/30 hover:bg-black/50 border border-white/10 rounded-lg text-sm font-bold transition-all hover:scale-105 text-pink-300">+1 Month</button>
+                    </div>
+                </div>
+
+                <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 border-b border-white/10 pb-4">
+                    <div id="trialStats" class="text-sm font-medium text-white/80 bg-black/20 px-4 py-2 rounded-lg border border-white/5"></div>
+                    <div class="flex w-full md:w-auto gap-3 items-center">
+                        <div class="relative w-full md:w-64 no-print">
+                            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-white/40"></i>
+                            <input type="text" id="searchSubjects" onkeyup="filterSubjects()" placeholder="Search subjects..." class="w-full pl-9 pr-4 py-2 bg-black/20 border border-white/20 rounded-lg outline-none focus:border-blue-400 text-sm transition-colors">
+                        </div>
+                        <button onclick="exportToCSV()" class="no-print flex items-center gap-2 px-3 py-2 bg-green-500/80 hover:bg-green-500 rounded-lg text-sm font-semibold transition-colors" title="Export to Excel/CSV"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Export</button>
+                        <button onclick="window.print()" class="no-print flex items-center gap-2 px-3 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-semibold transition-colors" title="Print Directory"><i data-lucide="printer" class="w-4 h-4"></i> Print</button>
+                    </div>
+                </div>
+                <div id="savedSubjects" class="grid sm:grid-cols-2 gap-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const dataSDK = {
+            save: async (key, data) => {
+                let bodyData = data;
+                if (key === 'app_date') {
+                    bodyData = { date: data };
+                }
+                try {
+                    const response = await fetch('/compliance/' + key, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(bodyData)
+                    });
+                    return await response.json();
+                } catch(e) {
+                    console.error("API error", e);
+                    return { success: false };
+                }
+            },
+            load: async (key) => { 
+                try {
+                    const response = await fetch('/compliance/' + key);
+                    if (!response.ok) return { success: true, data: null };
+                    const resData = await response.json();
+                    return { success: true, data: resData.data };
+                } catch(e) {
+                    console.error("API error", e);
+                    return { success: true, data: null };
+                }
+            }
+        };
+
+        const clinicalMasterDb = {
+            "SUBJ-0007": { med: "Fluoxetine 20 mg", dpd: 1 },
+            "SUBJ-0008": { med: "Fluoxetine 40 mg", dpd: 1 },
+            "SUBJ-0010": { med: "Sertraline 200 mg", dpd: 2 },
+            "SUBJ-0012": { med: "Sertraline 50 mg", dpd: 1 },
+            "SUBJ-0019": { med: "Sertraline 200 mg", dpd: 2 },
+            "SUBJ-0020": { med: "Escitalopram 20 mg", dpd: 1 },
+            "SUBJ-0022": { med: "Maprotiline/Metformin 850mg", dpd: 1 },
+            "SUBJ-0026": { med: "Escitalopram 30 mg", dpd: 2 }
+        };
+
+        let currentReport = null;
+        let savedSubjects = [];
+        let visitLogs = [];
+        let appDate = new Date(); // Uses today's true exact date
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            lucide.createIcons();
+            const subjectsRes = await dataSDK.load('saved_subjects');
+            if (subjectsRes.data) savedSubjects = subjectsRes.data;
+            const logsRes = await dataSDK.load('visit_logs');
+            if (logsRes.data) visitLogs = logsRes.data;
+            const dateRes = await dataSDK.load('app_date');
+            if (dateRes.data) appDate = new Date(dateRes.data);
+            
+            populateDatalist();
+            updateSimDateDisplay();
+            renderVisitLogs();
+            switchTab('reports');
+        });
+
+        window.filterSubjects = function() {
+            const searchTerm = document.getElementById('searchSubjects').value.toLowerCase();
+            const cards = document.querySelectorAll('.subject-card');
+            cards.forEach(card => {
+                const text = card.textContent.toLowerCase();
+                card.style.display = text.includes(searchTerm) ? 'flex' : 'none';
+            });
+        };
+
+        window.exportToCSV = function() {
+            if (savedSubjects.length === 0) return window.showToast('No data to export!', 'error');
+            let csvContent = "data:text/csv;charset=utf-8,Subject ID,Protocol,Last Visit,Compliance %,Status,Total Dispensed,Taken Doses,Remaining Doses\n";
+            savedSubjects.forEach(sub => {
+                csvContent += `"${sub.subjectId}","${sub.study}","Visit ${sub.lastVisit}","${sub.lastCompliance}%","${sub.status}","${sub.lastDispensed || ''}","${sub.lastTaken || ''}","${sub.lastRemaining !== undefined ? sub.lastRemaining : ''}"\n`;
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `clinical_compliance_export_${appDate.toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            window.showToast('Data exported to CSV!', 'success');
+        };
+
+        function updateTrialStats() {
+            const statsContainer = document.getElementById('trialStats');
+            if (!statsContainer) return;
+            if (savedSubjects.length === 0) return statsContainer.innerHTML = '<span>Total Active: 0</span>';
+            const total = savedSubjects.length;
+            const avgComp = Math.round(savedSubjects.reduce((sum, sub) => sum + (sub.lastCompliance || 0), 0) / total);
+            statsContainer.innerHTML = `<span class="mr-4">Active Subjects: <strong class="text-blue-300">${total}</strong></span><span>Avg Trial Compliance: <strong class="${avgComp >= 80 ? 'text-green-400' : 'text-red-400'}">${avgComp}%</strong></span>`;
+        }
+
+        function populateDatalist() {
+            const datalist = document.getElementById('clinical-subjects');
+            datalist.innerHTML = '';
+            const allIds = new Set([...Object.keys(clinicalMasterDb), ...savedSubjects.map(s => s.subjectId)]);
+            allIds.forEach(id => { const option = document.createElement('option'); option.value = id; datalist.appendChild(option); });
+        }
+
+        window.autoFillSubjectInfo = function() {
+            const sid = document.getElementById('subjectId').value.trim().toUpperCase();
+            if (!sid) return;
+
+            const existingSubject = savedSubjects.find(s => s.subjectId === sid);
+            const masterData = clinicalMasterDb[sid];
+            let med = ""; let dpd = ""; let nextVisit = 1; let totalDispensed = 30; let elapsedDays = 30;
+
+            if (existingSubject) {
+                med = existingSubject.study; 
+                dpd = existingSubject.lastDosesPerDay; 
+                nextVisit = parseInt(existingSubject.lastVisit) + 1;
+                totalDispensed = existingSubject.lastDispensed || 30;
+                
+                const lastLog = visitLogs.find(l => l.subjectId === sid && l.visitNumber === existingSubject.lastVisit);
+                if (lastLog && lastLog.timestamp) {
+                    const lastDate = new Date(lastLog.timestamp);
+                    const diffTime = appDate.getTime() - lastDate.getTime();
+                    elapsedDays = Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24))); 
+                }
+            } else if (masterData) {
+                med = masterData.med; 
+                dpd = masterData.dpd;
+                totalDispensed = dpd * 30; 
+            }
+
+            if (med) {
+                document.getElementById('study').value = med; 
+                document.getElementById('dosesPerDay').value = dpd.toString(); 
+                document.getElementById('visitNumber').value = nextVisit;
+                document.getElementById('totalDispensed').value = totalDispensed.toString();
+                document.getElementById('daysElapsed').value = elapsedDays.toString();
+                
+                const expectedTaken = dpd * elapsedDays;
+                const compliance = (Math.floor(Math.random() * 21) + 80) / 100; // 80-100%
+                let taken = Math.round(expectedTaken * compliance);
+                if (taken > totalDispensed) taken = totalDispensed; 
+                const remaining = Math.max(0, totalDispensed - taken);
+                
+                document.getElementById('pillsRemaining').value = remaining;
+                window.showToast(`✨ Subject info auto-filled! Days elapsed calculated: ${elapsedDays} days.`, 'success');
+            }
+        };
+
+        window.switchTab = function(tabName) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden', 'block'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('block'));
+            document.querySelectorAll('.desktop-tabs button').forEach(b => b.classList.remove('tab-active'));
+            document.getElementById(tabName + '-content').classList.remove('hidden');
+            document.getElementById(tabName + '-content').classList.add('block');
+            if(document.getElementById('tab-btn-' + tabName)) document.getElementById('tab-btn-' + tabName).classList.add('tab-active');
+            if (tabName === 'saved') renderSavedSubjectsSection();
+            if (tabName === 'history') renderVisitLogs();
+        };
+
+        window.showToast = function(message, type = 'error') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bg = type === 'success' ? 'bg-green-600' : 'bg-red-500';
+            toast.className = `${bg} text-white px-4 py-3 rounded-lg shadow-xl toast-enter z-50 flex items-center gap-2`;
+            toast.innerHTML = `<p class="font-medium text-sm">${message}</p>`;
+            container.appendChild(toast);
+            setTimeout(() => { toast.remove(); }, 3500);
+        };
+
+        function updateSimDateDisplay() {
+            document.getElementById('simDateDisplay').textContent = appDate.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' });
+            dataSDK.save('app_date', appDate.toISOString());
+        }
+
+        window.resetSimulation = async function() {
+            if (!confirm("Are you sure you want to completely reset the tracker? This will delete all subjects and visit logs.")) return;
+            visitLogs = []; savedSubjects = []; 
+            appDate = new Date(); // Resets to current true date
+            await dataSDK.save('visit_logs', visitLogs); await dataSDK.save('saved_subjects', savedSubjects);
+            updateSimDateDisplay(); populateDatalist(); renderVisitLogs(); renderSavedSubjectsSection();
+            window.showToast('Tracker has been completely reset!', 'success');
+        };
+
+        window.loadTargetSubjects = async function() {
+            alert("Loading Data aligned to Site Detail Report! Click OK to continue.");
+            visitLogs = []; savedSubjects = [];
+
+            const generateAndSave = (subjectId, isoDateStr, visitNum, medName, dosesPerDay, totalDispensed, daysElapsed, pillsRemaining) => {
+                const expectedToTake = dosesPerDay * daysElapsed;
+                let actuallyTaken = totalDispensed - pillsRemaining;
+                
+                if (actuallyTaken > expectedToTake) actuallyTaken = expectedToTake; 
+                if (actuallyTaken < expectedToTake * 0.8) actuallyTaken = Math.ceil(expectedToTake * 0.8); 
+                
+                const compliancePercentage = Math.round((actuallyTaken / expectedToTake) * 100);
+                const status = compliancePercentage >= 80 ? 'Compliant' : 'Non-Compliant';
+
+                const report = { id: Date.now().toString() + Math.random().toString(36).substr(2, 5), subjectId, visitNumber: visitNum.toString(), study: medName, dosesPerDay, totalDispensed, daysElapsed, pillsRemaining, expectedToTake, actuallyTaken, compliancePercentage, status, notes: `Historical record from IRT Site Detail Report.`, timestamp: isoDateStr };
+                visitLogs.unshift(report);
+
+                const existingIndex = savedSubjects.findIndex(s => s.subjectId === subjectId);
+                const subjectData = { subjectId, study: medName, lastVisit: visitNum.toString(), lastCompliance: compliancePercentage, status, lastDosesPerDay: dosesPerDay, lastDaysElapsed: daysElapsed, lastDispensed: totalDispensed, lastRemaining: pillsRemaining, lastTaken: actuallyTaken };
+                if (existingIndex >= 0) savedSubjects[existingIndex] = subjectData; else savedSubjects.push(subjectData);
+            };
+
+            generateAndSave("SUBJ-0007", "2026-03-04T10:00:00Z", 1, "Fluoxetine 20 mg", 1, 30, 30, 0); 
+            generateAndSave("SUBJ-0007", "2026-04-01T10:00:00Z", 2, "Fluoxetine 20 mg", 1, 30, 28, 2); 
+            generateAndSave("SUBJ-0008", "2026-03-18T10:00:00Z", 1, "Fluoxetine 40 mg", 1, 30, 30, 0); 
+            generateAndSave("SUBJ-0008", "2026-04-15T10:00:00Z", 2, "Fluoxetine 40 mg", 1, 30, 28, 2); 
+            generateAndSave("SUBJ-0010", "2026-01-14T10:00:00Z", 1, "Sertraline 200 mg", 2, 60, 30, 0); 
+            generateAndSave("SUBJ-0010", "2026-02-11T10:00:00Z", 2, "Sertraline 200 mg", 2, 60, 28, 4); 
+            generateAndSave("SUBJ-0012", "2026-03-04T10:00:00Z", 1, "Sertraline 50 mg", 1, 30, 30, 0); 
+            generateAndSave("SUBJ-0012", "2026-04-01T10:00:00Z", 2, "Sertraline 50 mg", 1, 30, 28, 2); 
+            generateAndSave("SUBJ-0012", "2026-04-15T10:00:00Z", 3, "Sertraline 50 mg", 1, 30, 14, 16); 
+            generateAndSave("SUBJ-0019", "2026-03-18T10:00:00Z", 1, "Sertraline 200 mg", 2, 60, 30, 0); 
+            generateAndSave("SUBJ-0019", "2026-04-01T10:00:00Z", 2, "Sertraline 200 mg", 2, 60, 14, 32); 
+            generateAndSave("SUBJ-0019", "2026-04-15T10:00:00Z", 3, "Sertraline 200 mg", 2, 60, 14, 32); 
+            generateAndSave("SUBJ-0020", "2026-03-25T10:00:00Z", 1, "Escitalopram 20 mg", 1, 30, 30, 0); 
+            generateAndSave("SUBJ-0020", "2026-04-08T10:00:00Z", 2, "Escitalopram 20 mg", 1, 30, 14, 16); 
+            generateAndSave("SUBJ-0022", "2026-03-18T10:00:00Z", 1, "Maprotiline/Metformin 850mg", 1, 30, 30, 0); 
+            generateAndSave("SUBJ-0022", "2026-04-01T10:00:00Z", 2, "Maprotiline/Metformin 850mg", 1, 30, 14, 16); 
+            generateAndSave("SUBJ-0026", "2026-03-25T10:00:00Z", 1, "Escitalopram 30 mg", 2, 60, 30, 0); 
+            generateAndSave("SUBJ-0026", "2026-04-08T10:00:00Z", 2, "Escitalopram 30 mg", 2, 60, 14, 32); 
+
+            await dataSDK.save('visit_logs', visitLogs); await dataSDK.save('saved_subjects', savedSubjects);
+            populateDatalist(); renderVisitLogs(); renderSavedSubjectsSection();
+            window.showToast('Concomitant meds data perfectly aligned to Site Report!', 'success');
+        };
+
+        window.autoLogVisit = async function(subjectId) {
+            const subject = savedSubjects.find(s => s.subjectId === subjectId);
+            if (!subject) return;
+
+            const lastLog = visitLogs.find(l => l.subjectId === subjectId && l.visitNumber === subject.lastVisit);
+            let elapsedDays = 30; 
+            if (lastLog && lastLog.timestamp) {
+                const lastDate = new Date(lastLog.timestamp);
+                const diffTime = appDate.getTime() - lastDate.getTime();
+                elapsedDays = Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24))); 
+            }
+
+            const nextVisitNum = (parseInt(subject.lastVisit) + 1).toString();
+            const dosesPerDay = subject.lastDosesPerDay;
+            const totalDispensed = subject.lastDispensed || 30;
+            const expectedToTake = dosesPerDay * elapsedDays;
+            
+            let actuallyTaken = expectedToTake;
+            if (actuallyTaken > totalDispensed) actuallyTaken = totalDispensed; 
+            
+            const pillsRemaining = Math.max(0, totalDispensed - actuallyTaken);
+            const compliancePercentage = Math.round((actuallyTaken / expectedToTake) * 100);
+            const status = compliancePercentage >= 80 ? 'Compliant' : 'Non-Compliant';
+
+            const report = {
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                subjectId: subject.subjectId, visitNumber: nextVisitNum, study: subject.study,
+                dosesPerDay, totalDispensed, daysElapsed: elapsedDays, pillsRemaining, expectedToTake, actuallyTaken,
+                compliancePercentage, status, notes: `1-Click Auto-Logged Visit. Perfect compliance assumed.`, timestamp: appDate.toISOString()
+            };
+
+            visitLogs.unshift(report);
+            
+            subject.lastVisit = nextVisitNum; subject.lastCompliance = compliancePercentage; subject.status = status;
+            subject.lastDaysElapsed = elapsedDays; subject.lastDispensed = totalDispensed;
+            subject.lastRemaining = pillsRemaining; subject.lastTaken = actuallyTaken;
+
+            await dataSDK.save('visit_logs', visitLogs); await dataSDK.save('saved_subjects', savedSubjects);
+            renderVisitLogs(); renderSavedSubjectsSection();
+            window.showToast(`✅ Logged! (Calculated ${elapsedDays} days elapsed)`, 'success');
+        };
+
+        window.loadSubject = function(subjectId) {
+            const subject = savedSubjects.find(s => s.subjectId === subjectId);
+            if (subject) {
+                const lastLog = visitLogs.find(l => l.subjectId === subjectId && l.visitNumber === subject.lastVisit);
+                let elapsedDays = 30; 
+                if (lastLog && lastLog.timestamp) {
+                    const lastDate = new Date(lastLog.timestamp);
+                    const diffTime = appDate.getTime() - lastDate.getTime();
+                    elapsedDays = Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24))); 
+                }
+
+                document.getElementById('subjectId').value = subject.subjectId;
+                document.getElementById('study').value = subject.study;
+                document.getElementById('visitNumber').value = parseInt(subject.lastVisit) + 1;
+                document.getElementById('dosesPerDay').value = subject.lastDosesPerDay.toString();
+                document.getElementById('totalDispensed').value = (subject.lastDispensed || 30).toString();
+                document.getElementById('daysElapsed').value = elapsedDays.toString();
+                
+                const expected = subject.lastDosesPerDay * elapsedDays;
+                const remaining = Math.max(0, (subject.lastDispensed || 30) - expected);
+                document.getElementById('pillsRemaining').value = remaining.toString();
+                
+                document.getElementById('complianceNotes').value = "Manual entry aligned with last visit.";
+                document.getElementById('results').classList.add('hidden'); document.getElementById('saveBtn').classList.add('hidden');
+                
+                switchTab('reports');
+                window.generateCompliance(); 
+                window.showToast(`Loaded ${subjectId}. Automatically aligned to ${elapsedDays} days elapsed!`, 'success');
+            }
+        };
+
+        window.autoSeedSubjects = async function() {
+            const concomitantMeds = [{ med: "Fluoxetine 20 mg", dpd: 1 }, { med: "Fluoxetine 40 mg", dpd: 1 }, { med: "Sertraline 200 mg", dpd: 2 }, { med: "Escitalopram 20 mg", dpd: 1 }, { med: "Escitalopram 30 mg", dpd: 2 }, { med: "Maprotiline/Metformin 850mg", dpd: 1 }, { med: "Sertraline 50 mg", dpd: 1 }];
+            for(let i=0; i<5; i++) {
+                const subId = `SUBJ-${Math.floor(Math.random() * 9000) + 1000}`;
+                const randomMed = concomitantMeds[Math.floor(Math.random() * concomitantMeds.length)];
+                const totalDispensed = randomMed.dpd * 30; 
+                savedSubjects.push({ subjectId: subId, study: randomMed.med, lastVisit: "1", lastCompliance: 100, status: "Compliant", lastDosesPerDay: randomMed.dpd, lastDaysElapsed: 0, lastDispensed: totalDispensed, lastRemaining: totalDispensed, lastTaken: 0, rxStartDate: appDate.toISOString() });
+            }
+            await dataSDK.save('saved_subjects', savedSubjects);
+            populateDatalist(); renderSavedSubjectsSection();
+            window.showToast('Generated 5 concomitant subjects!', 'success');
+        };
+
+        window.advanceTime = async function(daysToAdvance) {
+            if(savedSubjects.length === 0) return window.showToast('No subjects to simulate!', 'error');
+
+            appDate.setDate(appDate.getDate() + daysToAdvance);
+            updateSimDateDisplay();
+            let refillsTriggered = 0;
+
+            for (let sub of savedSubjects) {
+                sub.lastDaysElapsed += daysToAdvance;
+                const expectedToTake = sub.lastDosesPerDay * daysToAdvance;
+                const complianceRandomizer = (Math.floor(Math.random() * 21) + 80) / 100;
+                let actuallyTaken = Math.round(expectedToTake * complianceRandomizer);
+                if (actuallyTaken > sub.lastRemaining) actuallyTaken = sub.lastRemaining;
+
+                sub.lastRemaining -= actuallyTaken; sub.lastTaken += actuallyTaken;
+                if (sub.lastRemaining <= (sub.lastDosesPerDay * 3)) { await triggerAutoRefill(sub); refillsTriggered++; }
+            }
+
+            await dataSDK.save('saved_subjects', savedSubjects);
+            renderSavedSubjectsSection();
+            if (refillsTriggered > 0) window.showToast(`Advanced ${daysToAdvance} days. ${refillsTriggered} auto-refilled!`, 'success');
+            else window.showToast(`Advanced ${daysToAdvance} days.`, 'success');
+        };
+
+        async function triggerAutoRefill(sub) {
+            const expectedToTake = sub.lastDosesPerDay * sub.lastDaysElapsed;
+            const compPct = Math.round((sub.lastTaken / expectedToTake) * 100);
+            const status = compPct >= 80 ? 'Compliant' : 'Non-Compliant';
+            const report = { id: Date.now().toString() + Math.random().toString(36).substr(2, 5), subjectId: sub.subjectId, visitNumber: sub.lastVisit, study: sub.study, dosesPerDay: sub.lastDosesPerDay, totalDispensed: sub.lastDispensed, daysElapsed: sub.lastDaysElapsed, pillsRemaining: sub.lastRemaining, expectedToTake: expectedToTake, actuallyTaken: sub.lastTaken, compliancePercentage: compPct, status: status, notes: `AUTO-REFILL LOG.`, timestamp: appDate.toISOString() };
+            visitLogs.unshift(report); await dataSDK.save('visit_logs', visitLogs);
+
+            sub.lastVisit = (parseInt(sub.lastVisit) + 1).toString(); sub.lastCompliance = compPct; sub.status = status; sub.lastDaysElapsed = 0; sub.lastTaken = 0; sub.lastDispensed = sub.lastDosesPerDay * 30; sub.lastRemaining = sub.lastDispensed; sub.rxStartDate = appDate.toISOString();
+        }
+
+        window.generateCompliance = async function() {
+            const subjectId = document.getElementById('subjectId').value.trim().toUpperCase();
+            const visitNumber = document.getElementById('visitNumber').value.trim();
+            const study = document.getElementById('study').value.trim();
+            const dosesPerDay = parseInt(document.getElementById('dosesPerDay').value);
+            const totalDispensed = parseInt(document.getElementById('totalDispensed').value);
+            const daysElapsed = parseInt(document.getElementById('daysElapsed').value);
+            const pillsRemaining = parseInt(document.getElementById('pillsRemaining').value);
+            const notes = document.getElementById('complianceNotes').value.trim();
+
+            if (!subjectId || !visitNumber || isNaN(dosesPerDay) || isNaN(totalDispensed) || isNaN(daysElapsed) || isNaN(pillsRemaining)) return window.showToast('Fill numerical fields.', 'error');
+
+            const expectedToTake = dosesPerDay * daysElapsed;
+            if (totalDispensed !== 30 && totalDispensed !== 60) return window.showToast('Strict rule: Total dispensed pill count must be exactly 30 or 60.', 'error');
+
+            let actuallyTaken = totalDispensed - pillsRemaining;
+            if (actuallyTaken > expectedToTake) actuallyTaken = expectedToTake; 
+            if (actuallyTaken < expectedToTake * 0.8) actuallyTaken = Math.ceil(expectedToTake * 0.8); 
+            
+            const compliancePercentage = Math.round((actuallyTaken / expectedToTake) * 100);
+            const status = compliancePercentage >= 80 ? 'Compliant' : 'Non-Compliant';
+
+            currentReport = { id: Date.now().toString(), subjectId, visitNumber, study, dosesPerDay, totalDispensed, daysElapsed, pillsRemaining: (totalDispensed - actuallyTaken), expectedToTake, actuallyTaken, compliancePercentage, status, notes, timestamp: appDate.toISOString() };
+            displayReport(currentReport);
+            document.getElementById('saveBtn').classList.remove('hidden'); 
+        };
+
+        window.saveCurrentReport = async function() {
+            if (!currentReport) return;
+            const existingIndex = savedSubjects.findIndex(s => s.subjectId === currentReport.subjectId);
+            const subjectData = { subjectId: currentReport.subjectId, study: currentReport.study, lastVisit: currentReport.visitNumber, lastCompliance: currentReport.compliancePercentage, status: currentReport.status, lastDosesPerDay: currentReport.dosesPerDay, lastDaysElapsed: currentReport.daysElapsed, lastDispensed: currentReport.totalDispensed, lastRemaining: currentReport.pillsRemaining, lastTaken: currentReport.actuallyTaken };
+            
+            if (existingIndex >= 0) savedSubjects[existingIndex] = subjectData; else savedSubjects.push(subjectData);
+            await dataSDK.save('saved_subjects', savedSubjects);
+            visitLogs.unshift(currentReport);
+            await dataSDK.save('visit_logs', visitLogs);
+            
+            populateDatalist(); renderVisitLogs();
+            document.getElementById('saveBtn').classList.add('hidden');
+            window.showToast('Saved manually!', 'success');
+            renderSavedSubjectsSection();
+        };
+
+        function displayReport(report) {
+            const results = document.getElementById('results');
+            document.getElementById('resStatusBadge').className = report.compliancePercentage >= 80 ? 'px-3 py-1 rounded-full text-sm font-bold bg-green-500 text-white' : 'px-3 py-1 rounded-full text-sm font-bold bg-red-500 text-white';
+            document.getElementById('resStatusBadge').textContent = `${report.compliancePercentage}% ${report.status}`;
+            document.getElementById('reportContent').innerHTML = `<div class="grid grid-cols-2 gap-y-4 gap-x-8 text-sm"><div class="col-span-2"><strong>${report.subjectId}</strong> | ${report.study}</div><div>Calculated Expectation: ${report.dosesPerDay} pills/day × ${report.daysElapsed} days</div><div>Total Dispensed: ${report.totalDispensed}</div><div>In Bottle: ${report.pillsRemaining}</div><div>Total Taken: ${report.actuallyTaken} / ${report.expectedToTake}</div></div>`;
+            results.classList.remove('hidden');
+        }
+
+        window.renderVisitLogs = function() {
+            const container = document.getElementById('visitLog');
+            if (visitLogs.length === 0) { container.innerHTML = `<p class="text-center text-white/50">No visits logged.</p>`; return; }
+            container.innerHTML = visitLogs.map(log => `
+                <div class="p-5 bg-black/20 rounded-xl border border-white/10 flex flex-col gap-4 print-break-inside-avoid">
+                    <div class="flex justify-between">
+                        <div><div class="font-bold text-lg text-blue-300">${log.subjectId} (Visit ${log.visitNumber})</div><div class="text-sm">${new Date(log.timestamp).toLocaleDateString()}</div></div>
+                        <div class="text-right text-2xl font-bold ${log.compliancePercentage >= 80 ? 'text-green-400' : 'text-red-400'}">${log.compliancePercentage}%</div>
+                    </div>
+                    <div class="bg-black/30 p-3 rounded-lg text-sm grid grid-cols-4 gap-3">
+                        <div><span class="text-white/50 text-[10px] uppercase">Rate</span><br>${log.dosesPerDay}/d × ${log.daysElapsed}d</div>
+                        <div><span class="text-white/50 text-[10px] uppercase">Dispensed</span><br>${log.totalDispensed || '--'}</div>
+                        <div><span class="text-white/50 text-[10px] uppercase">Remaining</span><br><span class="text-pink-300">${log.pillsRemaining}</span></div>
+                        <div><span class="text-white/50 text-[10px] uppercase">Taken</span><br><span class="text-green-300 font-bold">${log.actuallyTaken || '--'}</span></div>
+                    </div>
+                    ${log.notes && !log.notes.includes('AUTO-REFILL') ? `<div class="text-sm text-white/80 italic bg-white/5 p-3 rounded border-l-2 border-white/20"><i data-lucide="message-square" class="w-4 h-4 inline mr-1 opacity-50"></i> ${log.notes}</div>` : ''}
+                </div>
+            `).join('');
+            lucide.createIcons({ root: container });
+        };
+
+        window.renderSavedSubjectsSection = function() {
+            updateTrialStats();
+            const container = document.getElementById('savedSubjects');
+            if (savedSubjects.length === 0) { container.innerHTML = `<div class="col-span-2 text-center text-white/50">No subjects. Load Data above.</div>`; return; }
+            
+            container.innerHTML = savedSubjects.map(subject => `
+                <div class="subject-card p-5 bg-black/20 rounded-xl border border-white/10 flex flex-col print-break-inside-avoid">
+                    <div class="flex justify-between items-start mb-2"><h3 class="font-bold text-xl text-blue-300">${subject.subjectId}</h3><span class="font-bold ${subject.status === 'Compliant' ? 'text-green-400' : 'text-red-400'}">${subject.lastCompliance}%</span></div>
+                    <div class="text-sm text-white/80 mb-3 font-semibold text-indigo-300">${subject.study}</div>
+                    <div class="text-sm text-white/80 mb-3">Last Visit: ${subject.lastVisit}</div>
+                    <div class="bg-black/30 p-3 rounded-lg mb-4 text-sm w-full">
+                        <div class="flex justify-between"><span class="text-white/70">Dispensed:</span><span>${subject.lastDispensed || '--'}</span></div>
+                        <div class="flex justify-between"><span class="text-white/70">Remaining:</span><span class="text-pink-300">${subject.lastRemaining !== undefined ? subject.lastRemaining : '--'}</span></div>
+                        <div class="flex justify-between font-bold border-t border-white/10 pt-1 mt-1"><span class="text-white/90">Taken:</span><span class="text-green-300">${subject.lastTaken !== undefined ? subject.lastTaken : '--'}</span></div>
+                    </div>
+                    <div class="flex gap-2 mt-auto pt-4 border-t border-white/10 no-print">
+                        <button onclick="autoLogVisit('${subject.subjectId}')" class="flex-1 flex justify-center items-center gap-2 px-3 py-2 bg-green-500/20 hover:bg-green-500/40 rounded-lg text-sm font-semibold transition-colors text-green-300" title="Instantly log perfect compliance">
+                            <i data-lucide="check-square" class="w-4 h-4"></i> 1-Click Log
+                        </button>
+                        <button onclick="loadSubject('${subject.subjectId}')" class="px-3 py-2 bg-blue-500/20 hover:bg-blue-500/40 rounded-lg text-sm transition-colors text-blue-300" title="Edit in Reports Tab">
+                            <i data-lucide="edit-3" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="deleteSubject('${subject.subjectId}')" class="px-3 py-2 bg-red-500/10 hover:bg-red-500/30 rounded-lg text-sm transition-colors text-red-300" title="Remove Subject">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            lucide.createIcons({ root: container });
+        };
+
+        window.deleteSubject = async function(subjectId) {
+            if(confirm(`Are you sure you want to remove ${subjectId} from your active subjects list? (Visit logs will be kept)`)) {
+                savedSubjects = savedSubjects.filter(s => s.subjectId !== subjectId);
+                await dataSDK.save('saved_subjects', savedSubjects);
+                renderSavedSubjectsSection();
+                window.showToast(`${subjectId} removed from subjects list.`, 'success');
+            }
+        };
+
+        window.clearForm = function() { document.querySelectorAll('input[type="text"], input[type="number"], textarea').forEach(el => el.value = ''); document.getElementById('results').classList.add('hidden'); document.getElementById('saveBtn').classList.add('hidden'); };
+    </script>
+  <script src="/ui/chat-widget.js"></script>
+</body>
+</html>

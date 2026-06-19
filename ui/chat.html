@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Clinical Research Platform — AI Chat</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 text-slate-800">
+  <div class="max-w-3xl mx-auto p-4 flex flex-col h-screen">
+    <header class="mb-3">
+      <h1 class="text-2xl font-bold">AI Chat <span class="text-sm font-normal text-slate-500">— with learning</span></h1>
+      <p class="text-sm text-slate-500">
+        Ask about a subject's protocol visits, compliance, and trips. It remembers what you teach it.
+        Other modules:
+        <a class="text-blue-600 underline" href="/ui/compliance.html">Compliance</a>,
+        <a class="text-blue-600 underline" href="/ui/dispatch.html">Dispatch</a>.
+      </p>
+      <div class="mt-2 flex items-center gap-2">
+        <label class="text-sm text-slate-600">Focus subject:</label>
+        <input id="subject" placeholder="e.g. SUBJ-0012"
+               class="border rounded px-2 py-1 text-sm w-40" />
+      </div>
+    </header>
+
+    <div id="log" class="flex-1 overflow-y-auto bg-white rounded-lg shadow p-4 space-y-3"></div>
+
+    <form id="form" class="mt-3 flex gap-2">
+      <input id="input" autocomplete="off" placeholder="Ask something…"
+             class="flex-1 border rounded-lg px-3 py-2" />
+      <button id="send" class="bg-blue-600 text-white rounded-lg px-4 py-2 font-medium disabled:opacity-50">
+        Send
+      </button>
+    </form>
+  </div>
+
+  <script>
+    const log = document.getElementById('log');
+    const form = document.getElementById('form');
+    const input = document.getElementById('input');
+    const sendBtn = document.getElementById('send');
+    const subjectEl = document.getElementById('subject');
+    const history = [];
+
+    function bubble(role, text, meta) {
+      const wrap = document.createElement('div');
+      wrap.className = role === 'user' ? 'text-right' : 'text-left';
+      const b = document.createElement('div');
+      b.className = 'inline-block rounded-lg px-3 py-2 max-w-[85%] whitespace-pre-wrap ' +
+        (role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-800');
+      b.textContent = text;
+      wrap.appendChild(b);
+      if (meta) {
+        const m = document.createElement('div');
+        m.className = 'text-xs text-slate-400 mt-1';
+        m.textContent = meta;
+        wrap.appendChild(m);
+      }
+      log.appendChild(wrap);
+      log.scrollTop = log.scrollHeight;
+      return b;
+    }
+
+    function appendProvenance(bubbleEl, sources, toolCalls) {
+      // sources: deduplicated human summaries; toolCalls for fallback names
+      const items = (sources && sources.length)
+        ? sources
+        : (toolCalls && toolCalls.length ? toolCalls.map(t => t.summary || t.name) : []);
+      if (!items.length) return;
+      const m = document.createElement('div');
+      m.className = 'text-xs text-slate-400 mt-1';
+      m.textContent = 'Sources: ' + items.join(' · ');
+      bubbleEl.parentElement.appendChild(m);
+    }
+
+    async function sendStreaming(payload, thinkingBubble) {
+      const res = await fetch('/chat/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        // Non-2xx before streaming — treat as error (e.g. 503 no-key)
+        const data = await res.json().catch(() => ({}));
+        throw Object.assign(new Error(data.detail || ('HTTP ' + res.status)), { status: res.status });
+      }
+
+      // Read SSE stream
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalMeta = null;
+      let replyText = '';
+
+      thinkingBubble.textContent = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        // Process complete SSE lines
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop(); // keep incomplete last chunk
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith('data:')) continue;
+          let json_str = line.slice(5).trim();
+          let evt;
+          try { evt = JSON.parse(json_str); } catch { continue; }
+          if (evt.error) {
+            throw new Error(evt.error);
+          } else if (evt.done) {
+            finalMeta = evt;
+          } else if (typeof evt.token === 'string') {
+            replyText += evt.token;
+            thinkingBubble.textContent = replyText;
+            log.scrollTop = log.scrollHeight;
+          }
+        }
+      }
+      return { reply: replyText, meta: finalMeta };
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      sendBtn.disabled = true;
+      bubble('user', text);
+      history.push({ role: 'user', content: text });
+
+      const thinking = bubble('assistant', '…');
+      try {
+        const payload = { messages: history, subject: subjectEl.value.trim() || null };
+        let reply = '';
+        let toolCalls = [];
+        let sources = [];
+
+        try {
+          // Attempt streaming first
+          const { reply: r, meta } = await sendStreaming(payload, thinking);
+          reply = r;
+          if (meta) {
+            toolCalls = meta.tool_calls || [];
+            sources = meta.sources || [];
+          }
+        } catch (streamErr) {
+          // Graceful fallback to non-streaming endpoint
+          thinking.textContent = '…';
+          const res = await fetch('/chat/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            thinking.textContent = '⚠ ' + (data.detail || ('Error ' + res.status));
+            thinking.className += ' !bg-amber-100 !text-amber-800';
+            return;
+          }
+          reply = data.reply || '';
+          toolCalls = data.tool_calls || [];
+          sources = data.sources || [];
+          thinking.textContent = reply || '(no reply)';
+        }
+
+        if (thinking.textContent !== reply) {
+          thinking.textContent = reply || '(no reply)';
+        }
+        history.push({ role: 'assistant', content: reply || '' });
+        appendProvenance(thinking, sources, toolCalls);
+      } catch (err) {
+        thinking.textContent = '⚠ Network error: ' + err;
+      } finally {
+        sendBtn.disabled = false;
+        input.focus();
+      }
+    });
+  </script>
+</body>
+</html>

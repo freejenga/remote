@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clinical Research Platform</title>
+    <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23fde047" stroke="%23ec4899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11H1l8-8 8 8h-8v12"/><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/></svg>'>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; font-family: system-ui, -apple-system, sans-serif; }
+        .glass { background: rgba(255, 255, 255, 0.25); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.18); }
+        .card-hover { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+        .card-hover:hover { transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
+        .status-dot { width: 10px; height: 10px; border-radius: 9999px; display: inline-block; }
+    </style>
+</head>
+<body class="text-white pb-12">
+    <div class="container mx-auto px-4 py-10 max-w-5xl">
+        <div class="glass rounded-2xl p-6 md:p-10 shadow-2xl">
+            <div class="flex items-center justify-center gap-3 mb-2">
+                <i data-lucide="activity" class="w-9 h-9 text-yellow-300"></i>
+                <h1 class="text-3xl md:text-4xl font-bold text-center bg-gradient-to-r from-yellow-300 to-pink-300 bg-clip-text text-transparent" style="-webkit-text-fill-color: inherit;">
+                    Clinical Research Platform
+                </h1>
+            </div>
+            <p class="text-center text-white/70 mb-2">All-in-one clinical research assistant</p>
+            <div class="flex items-center justify-center gap-2 mb-10 text-sm">
+                <span id="statusDot" class="status-dot bg-gray-400"></span>
+                <span id="statusText" class="text-white/80">checking server…</span>
+            </div>
+
+            <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                <!-- Studies -->
+                <a href="/ui/studies.html" class="glass card-hover rounded-xl p-6 block">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="p-2 rounded-lg bg-yellow-400/20"><i data-lucide="folder-kanban" class="w-6 h-6 text-yellow-300"></i></div>
+                        <h2 class="text-lg font-semibold">Studies</h2>
+                    </div>
+                    <p class="text-sm text-white/70">Manage multiple studies & protocol versions with a draft → approved review workflow.</p>
+                </a>
+
+                <!-- Protocol -->
+                <a href="/ui/protocol.html" class="glass card-hover rounded-xl p-6 block">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="p-2 rounded-lg bg-pink-400/20"><i data-lucide="file-text" class="w-6 h-6 text-pink-300"></i></div>
+                        <h2 class="text-lg font-semibold">Protocol Agent</h2>
+                    </div>
+                    <p class="text-sm text-white/70">Parse trial protocols into visit schedules, SoA conflict reports & CTMS exports.</p>
+                </a>
+
+                <!-- Compliance -->
+                <a href="/ui/compliance.html" class="glass card-hover rounded-xl p-6 block">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="p-2 rounded-lg bg-green-400/20"><i data-lucide="pill" class="w-6 h-6 text-green-300"></i></div>
+                        <h2 class="text-lg font-semibold">Compliance Tracker</h2>
+                    </div>
+                    <p class="text-sm text-white/70">Subjects, visit logs & medication-compliance reporting against the study date.</p>
+                </a>
+
+                <!-- Dispatch -->
+                <a href="/ui/dispatch.html" class="glass card-hover rounded-xl p-6 block">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="p-2 rounded-lg bg-blue-400/20"><i data-lucide="ambulance" class="w-6 h-6 text-blue-300"></i></div>
+                        <h2 class="text-lg font-semibold">Serengeti Dispatch</h2>
+                    </div>
+                    <p class="text-sm text-white/70">Medical transport trips with pricing, quotes & invoice generation.</p>
+                </a>
+
+                <!-- Chat -->
+                <a href="/ui/chat.html" class="glass card-hover rounded-xl p-6 block">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="p-2 rounded-lg bg-purple-400/20"><i data-lucide="message-circle" class="w-6 h-6 text-purple-300"></i></div>
+                        <h2 class="text-lg font-semibold">AI Assistant</h2>
+                    </div>
+                    <p class="text-sm text-white/70">De-identified AI chat across your study data (requires ANTHROPIC_API_KEY).</p>
+                </a>
+
+                <!-- API docs -->
+                <a href="/docs" class="glass card-hover rounded-xl p-6 block">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="p-2 rounded-lg bg-white/20"><i data-lucide="code-2" class="w-6 h-6 text-white"></i></div>
+                        <h2 class="text-lg font-semibold">API Docs</h2>
+                    </div>
+                    <p class="text-sm text-white/70">Interactive Swagger UI for every endpoint across all modules.</p>
+                </a>
+            </div>
+
+            <div class="mt-8 flex flex-wrap items-center justify-center gap-4 text-sm text-white/60">
+                <a href="/ui/login.html" class="hover:text-white flex items-center gap-1"><i data-lucide="log-in" class="w-4 h-4"></i> Login</a>
+                <span>·</span>
+                <a href="/audit/entries" class="hover:text-white flex items-center gap-1"><i data-lucide="shield-check" class="w-4 h-4"></i> Audit log</a>
+                <span>·</span>
+                <a href="/health" class="hover:text-white flex items-center gap-1"><i data-lucide="heart-pulse" class="w-4 h-4"></i> Health</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+        (async () => {
+            const dot = document.getElementById('statusDot');
+            const txt = document.getElementById('statusText');
+            try {
+                const r = await fetch('/health');
+                if (r.ok) { dot.className = 'status-dot bg-green-400'; txt.textContent = 'server online'; }
+                else throw new Error();
+            } catch { dot.className = 'status-dot bg-red-400'; txt.textContent = 'server unreachable'; }
+        })();
+    </script>
+</body>
+</html>

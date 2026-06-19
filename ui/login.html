@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Clinical Research Platform — Sign in</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen flex items-center justify-center">
+  <div class="bg-white rounded-xl shadow p-8 w-full max-w-sm">
+    <h1 class="text-xl font-bold mb-1">Clinical Research Platform</h1>
+    <p class="text-sm text-slate-500 mb-4">Enter the access token to continue.</p>
+    <form id="form" class="space-y-3">
+      <input id="token" type="password" placeholder="Access token" autocomplete="off"
+             class="w-full border rounded-lg px-3 py-2" />
+      <button class="w-full bg-blue-600 text-white rounded-lg py-2 font-medium">Sign in</button>
+    </form>
+    <p id="msg" class="text-sm mt-3"></p>
+  </div>
+  <script>
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg = document.getElementById('msg');
+      const fd = new FormData();
+      fd.append('token', document.getElementById('token').value);
+      try {
+        const r = await fetch('/auth/login', { method: 'POST', body: fd });
+        const d = await r.json();
+        if (r.ok && d.ok) {
+          msg.className = 'text-sm mt-3 text-green-600';
+          msg.textContent = 'Signed in. Redirecting…';
+          setTimeout(() => { window.location.href = '/ui/chat.html'; }, 600);
+        } else {
+          msg.className = 'text-sm mt-3 text-red-600';
+          msg.textContent = d.detail || 'Invalid token';
+        }
+      } catch (err) {
+        msg.className = 'text-sm mt-3 text-red-600';
+        msg.textContent = 'Error: ' + err;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.isort.sections]
+known_first_party = ["clinical_protocol_agent_final"]
+
+[tool.isort.skip]
+# Skip common build/venv folders
+paths = [".venv", "venv", "build", "dist", "node_modules"]

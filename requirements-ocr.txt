@@ -1,0 +1,6 @@
+# Optional OCR dependencies for scanned-PDF support
+# Install with: pip install -r requirements-ocr.txt
+# Also requires the Tesseract binary: https://github.com/UB-Mannheim/tesseract/wiki
+pytesseract>=0.3.10
+pdf2image>=1.16.0
+Pillow>=10.0.0

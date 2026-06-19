@@ -1,0 +1,18 @@
+Protocol ABC-101
+
+Schedule of Activities
+| Procedure | Screening | Cycle 1 Day 1 | Cycle 1 Day 8 | Week 4 | Follow-up |
+|-----------|-----------|---------------|---------------|--------|-----------|
+| Informed consent | X |  |  |  |  |
+| Blood sample | X | X | X* | X | X |
+| ECG | X |  |  |  |  |
+| Drug administration |  | X |  |  |  |
+| CT scan |  |  |  | X |  |
+
+Footnotes:
+* Blood sample on Cycle 1 Day 8 only if clinically indicated.
+
+Screening visit includes informed consent, blood sample, and ECG.
+Cycle 1 Day 1 visit includes blood sample and drug administration.
+Week 4 visit includes blood sample, AE review, and CT scan.
+Follow-up visit includes blood sample.

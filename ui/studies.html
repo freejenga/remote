@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Studies · Clinical Research Platform</title>
+    <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23fde047" stroke="%23ec4899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>'>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; font-family: system-ui, -apple-system, sans-serif; }
+        .glass { background: rgba(255, 255, 255, 0.25); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.18); }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        .toast-enter { animation: slideIn 0.3s ease forwards; }
+        .toast-exit { animation: fadeOut 0.3s ease forwards; }
+        .modal-bg { background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+        input, textarea, select { color-scheme: dark; }
+    </style>
+</head>
+<body class="text-white pb-12">
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 w-80 max-w-[90vw]"></div>
+
+    <div class="container mx-auto px-4 py-8 max-w-5xl">
+        <div class="glass rounded-2xl p-6 md:p-8 shadow-2xl">
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-8 flex-wrap gap-3">
+                <div class="flex items-center gap-3">
+                    <a href="/ui/index.html" class="p-2 rounded-lg hover:bg-white/10" title="Home"><i data-lucide="arrow-left" class="w-5 h-5"></i></a>
+                    <i data-lucide="folder-kanban" class="w-8 h-8 text-yellow-300"></i>
+                    <h1 class="text-2xl md:text-3xl font-bold bg-gradient-to-r from-yellow-300 to-pink-300 bg-clip-text text-transparent" style="-webkit-text-fill-color: inherit;">Studies</h1>
+                </div>
+                <button onclick="openStudyModal()" class="flex items-center gap-2 px-5 py-2.5 bg-green-500 hover:bg-green-600 rounded-lg font-semibold"><i data-lucide="plus" class="w-5 h-5"></i> New Study</button>
+            </div>
+
+            <!-- Studies list -->
+            <div id="studiesList" class="space-y-4">
+                <div class="text-center text-white/60 py-12">Loading studies…</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New/Edit Study Modal -->
+    <div id="studyModal" class="fixed inset-0 z-40 hidden items-center justify-center modal-bg p-4">
+        <div class="glass rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <h2 id="studyModalTitle" class="text-xl font-semibold mb-4 flex items-center gap-2"><i data-lucide="folder-plus" class="w-5 h-5 text-yellow-300"></i> New Study</h2>
+            <input type="hidden" id="studyEditId">
+            <label class="block text-sm mb-1">Study Name <span class="text-pink-300">*</span></label>
+            <input id="studyName" class="w-full px-4 py-3 bg-white/10 rounded-lg outline-none focus:bg-white/20 mb-4" placeholder="e.g. ABC-101">
+            <label class="block text-sm mb-1">Sponsor</label>
+            <input id="studySponsor" class="w-full px-4 py-3 bg-white/10 rounded-lg outline-none focus:bg-white/20 mb-6" placeholder="e.g. ExampleBio">
+            <div class="flex justify-end gap-3">
+                <button onclick="closeStudyModal()" class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg">Cancel</button>
+                <button onclick="saveStudy()" class="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg font-semibold">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Version Modal -->
+    <div id="versionModal" class="fixed inset-0 z-40 hidden items-center justify-center modal-bg p-4">
+        <div class="glass rounded-2xl p-6 w-full max-w-2xl shadow-2xl">
+            <h2 class="text-xl font-semibold mb-1 flex items-center gap-2"><i data-lucide="file-plus" class="w-5 h-5 text-pink-300"></i> New Protocol Version</h2>
+            <p id="versionModalStudy" class="text-sm text-white/60 mb-4"></p>
+            <input type="hidden" id="versionStudyId">
+            <label class="block text-sm mb-1">Version Label <span class="text-pink-300">*</span></label>
+            <input id="versionLabel" class="w-full px-4 py-3 bg-white/10 rounded-lg outline-none focus:bg-white/20 mb-4" placeholder="e.g. v1, Amendment 1">
+
+            <!-- Source toggle: paste text or upload a file -->
+            <div class="flex gap-1 bg-white/10 rounded-lg p-1 mb-4 text-sm">
+                <button type="button" id="srcTab-text" onclick="setVersionSource('text')" class="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md font-semibold bg-white/30"><i data-lucide="clipboard-type" class="w-4 h-4"></i> Paste text</button>
+                <button type="button" id="srcTab-file" onclick="setVersionSource('file')" class="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md font-semibold hover:bg-white/10"><i data-lucide="upload" class="w-4 h-4"></i> Upload file</button>
+            </div>
+
+            <div id="srcPanel-text">
+                <label class="block text-sm mb-1">Protocol Text <span class="text-pink-300">*</span></label>
+                <textarea id="versionText" class="w-full px-4 py-3 bg-white/10 rounded-lg outline-none focus:bg-white/20 h-40 mb-2" placeholder="Paste the protocol text — it will be parsed into a visit schedule…"></textarea>
+            </div>
+
+            <div id="srcPanel-file" class="hidden">
+                <label class="block text-sm mb-1">Protocol File <span class="text-pink-300">*</span></label>
+                <label for="versionFile" class="flex flex-col items-center justify-center gap-2 w-full h-40 border-2 border-dashed border-white/30 rounded-lg cursor-pointer hover:bg-white/5 mb-2">
+                    <i data-lucide="file-up" class="w-8 h-8 text-pink-300"></i>
+                    <span id="versionFileName" class="text-sm text-white/70">Click to choose a file</span>
+                    <span class="text-xs text-white/40">PDF · Word (.docx) · Excel (.xlsx) · CSV · TXT</span>
+                </label>
+                <input type="file" id="versionFile" accept=".pdf,.docx,.xlsx,.csv,.txt" class="hidden" onchange="document.getElementById('versionFileName').textContent = this.files[0]?.name || 'Click to choose a file'">
+            </div>
+
+            <p class="text-xs text-white/50 mb-6">The content is run through the parse pipeline and the resulting schedule is saved with this version.</p>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeVersionModal()" class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg">Cancel</button>
+                <button id="versionSaveBtn" onclick="saveVersion()" class="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg font-semibold">Create & Parse</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+        const STATUS_STYLES = {
+            draft:     'bg-gray-400/30 text-gray-100',
+            in_review: 'bg-yellow-400/30 text-yellow-100',
+            approved:  'bg-green-400/30 text-green-100',
+            rejected:  'bg-red-400/30 text-red-100',
+        };
+        const STATUS_FLOW = ['draft', 'in_review', 'approved', 'rejected'];
+
+        // ---- Toast ----
+        function toast(msg, kind = 'info') {
+            const colors = { info: 'bg-blue-500', success: 'bg-green-500', error: 'bg-red-500' };
+            const el = document.createElement('div');
+            el.className = `toast-enter ${colors[kind]} text-white px-4 py-3 rounded-lg shadow-lg text-sm`;
+            el.textContent = msg;
+            document.getElementById('toast-container').appendChild(el);
+            setTimeout(() => { el.classList.add('toast-exit'); setTimeout(() => el.remove(), 300); }, 3200);
+        }
+
+        async function api(path, opts = {}) {
+            const res = await fetch(path, {
+                headers: { 'Content-Type': 'application/json' }, ...opts,
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || `Request failed (${res.status})`);
+            return data;
+        }
+
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+        // ---- Load + render ----
+        const expanded = new Set();
+        async function loadStudies() {
+            const list = document.getElementById('studiesList');
+            try {
+                const { data } = await api('/studies');
+                if (!data.length) {
+                    list.innerHTML = `<div class="text-center text-white/60 py-12"><i data-lucide="folder-open" class="w-10 h-10 mx-auto mb-3 opacity-60"></i><p>No studies yet. Click <b>New Study</b> to create one.</p></div>`;
+                    lucide.createIcons();
+                    return;
+                }
+                list.innerHTML = data.map(renderStudyCard).join('');
+                lucide.createIcons();
+                // re-expand and load versions for any open cards
+                for (const id of expanded) loadVersions(id);
+            } catch (e) {
+                list.innerHTML = `<div class="text-center text-red-200 py-12">Error loading studies: ${esc(e.message)}</div>`;
+            }
+        }
+
+        function renderStudyCard(s) {
+            const isOpen = expanded.has(s.id);
+            return `
+            <div class="glass rounded-xl overflow-hidden" data-study="${s.id}">
+                <div class="p-5 flex items-center justify-between gap-3 cursor-pointer hover:bg-white/5" onclick="toggleStudy('${s.id}')">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <i data-lucide="${isOpen ? 'chevron-down' : 'chevron-right'}" class="w-5 h-5 flex-shrink-0"></i>
+                        <div class="min-w-0">
+                            <h3 class="text-lg font-semibold truncate">${esc(s.name)}</h3>
+                            <p class="text-xs text-white/60 truncate">${s.sponsor ? esc(s.sponsor) + ' · ' : ''}${s.version_count} version${s.version_count === 1 ? '' : 's'}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1 flex-shrink-0" onclick="event.stopPropagation()">
+                        <button onclick="openVersionModal('${s.id}', '${esc(s.name)}')" class="p-2 rounded-lg hover:bg-white/10" title="Add version"><i data-lucide="file-plus" class="w-4 h-4"></i></button>
+                        <button onclick="openStudyModal('${s.id}', '${esc(s.name)}', '${esc(s.sponsor || '')}')" class="p-2 rounded-lg hover:bg-white/10" title="Edit study"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                        <button onclick="deleteStudy('${s.id}', '${esc(s.name)}')" class="p-2 rounded-lg hover:bg-red-500/30" title="Delete study"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                </div>
+                <div id="versions-${s.id}" class="${isOpen ? '' : 'hidden'} border-t border-white/10 p-4 bg-black/10"></div>
+            </div>`;
+        }
+
+        function toggleStudy(id) {
+            const panel = document.getElementById(`versions-${id}`);
+            if (expanded.has(id)) { expanded.delete(id); panel.classList.add('hidden'); }
+            else { expanded.add(id); panel.classList.remove('hidden'); loadVersions(id); }
+            // refresh chevron
+            const card = document.querySelector(`[data-study="${id}"] [data-lucide]`);
+            loadStudies();
+        }
+
+        async function loadVersions(studyId) {
+            const panel = document.getElementById(`versions-${studyId}`);
+            if (!panel) return;
+            panel.innerHTML = `<div class="text-center text-white/50 py-4 text-sm">Loading versions…</div>`;
+            try {
+                const s = await api(`/studies/${studyId}`);
+                if (!s.versions.length) {
+                    panel.innerHTML = `<div class="text-center text-white/50 py-4 text-sm">No versions yet. Use the <i data-lucide="file-plus" class="w-3 h-3 inline"></i> button to add one.</div>`;
+                    lucide.createIcons(); return;
+                }
+                panel.innerHTML = s.versions.map(v => renderVersion(studyId, v)).join('');
+                lucide.createIcons();
+            } catch (e) {
+                panel.innerHTML = `<div class="text-center text-red-200 py-4 text-sm">${esc(e.message)}</div>`;
+            }
+        }
+
+        function renderVersion(studyId, v) {
+            const badge = STATUS_STYLES[v.status] || STATUS_STYLES.draft;
+            const conflicts = v.conflict_count || 0;
+            const opts = STATUS_FLOW.map(st => `<option value="${st}" ${st === v.status ? 'selected' : ''}>${st}</option>`).join('');
+            return `
+            <div class="bg-white/5 rounded-lg p-4 mb-3">
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="file-text" class="w-4 h-4 text-pink-300"></i>
+                        <span class="font-semibold">${esc(v.label)}</span>
+                        <span class="px-2 py-0.5 rounded-full text-xs font-bold ${badge}">${esc(v.status)}</span>
+                        ${conflicts ? `<span class="px-2 py-0.5 rounded-full text-xs bg-red-500/30 text-red-100 flex items-center gap-1"><i data-lucide="alert-triangle" class="w-3 h-3"></i>${conflicts} conflict${conflicts===1?'':'s'}</span>` : `<span class="px-2 py-0.5 rounded-full text-xs bg-green-500/20 text-green-100">no conflicts</span>`}
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="viewVersion('${studyId}','${v.id}')" class="p-1.5 rounded hover:bg-white/10" title="View schedule"><i data-lucide="eye" class="w-4 h-4"></i></button>
+                        <a href="/studies/${studyId}/versions/${v.id}/export?fmt=xlsx" class="p-1.5 rounded hover:bg-white/10 inline-flex" title="Export Excel"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i></a>
+                        <a href="/studies/${studyId}/versions/${v.id}/export?fmt=csv" class="p-1.5 rounded hover:bg-white/10 inline-flex" title="Export CSV"><i data-lucide="file-down" class="w-4 h-4"></i></a>
+                        <button onclick="deleteVersion('${studyId}','${v.id}','${esc(v.label)}')" class="p-1.5 rounded hover:bg-red-500/30" title="Delete version"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 mt-3 flex-wrap text-sm">
+                    <label class="text-white/60">Status:</label>
+                    <select onchange="updateStatus('${studyId}','${v.id}', this.value)" class="px-3 py-1.5 bg-white/10 rounded-lg outline-none text-sm">${opts}</select>
+                    <input id="rev-${v.id}" value="${esc(v.reviewer || '')}" placeholder="reviewer" class="px-3 py-1.5 bg-white/10 rounded-lg outline-none text-sm w-32">
+                    <input id="cmt-${v.id}" value="${esc(v.comments || '')}" placeholder="comments" class="px-3 py-1.5 bg-white/10 rounded-lg outline-none text-sm flex-1 min-w-[120px]">
+                    <button onclick="saveReview('${studyId}','${v.id}')" class="px-3 py-1.5 bg-purple-500 hover:bg-purple-600 rounded-lg text-sm font-semibold">Save review</button>
+                </div>
+                <div id="sched-${v.id}" class="hidden mt-3 bg-black/30 rounded-lg p-3 text-xs overflow-x-auto"></div>
+            </div>`;
+        }
+
+        // ---- Study CRUD ----
+        function openStudyModal(id = '', name = '', sponsor = '') {
+            document.getElementById('studyEditId').value = id;
+            document.getElementById('studyName').value = name;
+            document.getElementById('studySponsor').value = sponsor;
+            document.getElementById('studyModalTitle').innerHTML = id
+                ? '<i data-lucide="pencil" class="w-5 h-5 text-yellow-300"></i> Edit Study'
+                : '<i data-lucide="folder-plus" class="w-5 h-5 text-yellow-300"></i> New Study';
+            const m = document.getElementById('studyModal');
+            m.classList.remove('hidden'); m.classList.add('flex'); lucide.createIcons();
+        }
+        function closeStudyModal() { const m = document.getElementById('studyModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
+
+        async function saveStudy() {
+            const id = document.getElementById('studyEditId').value;
+            const name = document.getElementById('studyName').value.trim();
+            const sponsor = document.getElementById('studySponsor').value.trim();
+            if (!name) return toast('Study name is required', 'error');
+            try {
+                if (id) {
+                    await api(`/studies/${id}`, { method: 'PATCH', body: JSON.stringify({ name, sponsor: sponsor || null }) });
+                    toast('Study updated', 'success');
+                } else {
+                    await api('/studies', { method: 'POST', body: JSON.stringify({ name, sponsor: sponsor || null }) });
+                    toast('Study created', 'success');
+                }
+                closeStudyModal(); loadStudies();
+            } catch (e) { toast(e.message, 'error'); }
+        }
+
+        async function deleteStudy(id, name) {
+            if (!confirm(`Delete study "${name}" and all its versions? This cannot be undone.`)) return;
+            try { await api(`/studies/${id}`, { method: 'DELETE' }); expanded.delete(id); toast('Study deleted', 'success'); loadStudies(); }
+            catch (e) { toast(e.message, 'error'); }
+        }
+
+        // ---- Version ----
+        let versionSource = 'text';
+        function setVersionSource(src) {
+            versionSource = src;
+            const on = 'bg-white/30', off = 'hover:bg-white/10';
+            document.getElementById('srcTab-text').className = `flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md font-semibold ${src==='text'?on:off}`;
+            document.getElementById('srcTab-file').className = `flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md font-semibold ${src==='file'?on:off}`;
+            document.getElementById('srcPanel-text').classList.toggle('hidden', src !== 'text');
+            document.getElementById('srcPanel-file').classList.toggle('hidden', src !== 'file');
+            lucide.createIcons();
+        }
+
+        function openVersionModal(studyId, studyName) {
+            document.getElementById('versionStudyId').value = studyId;
+            document.getElementById('versionModalStudy').textContent = `Study: ${studyName}`;
+            document.getElementById('versionLabel').value = '';
+            document.getElementById('versionText').value = '';
+            document.getElementById('versionFile').value = '';
+            document.getElementById('versionFileName').textContent = 'Click to choose a file';
+            setVersionSource('text');
+            const m = document.getElementById('versionModal');
+            m.classList.remove('hidden'); m.classList.add('flex'); lucide.createIcons();
+        }
+        function closeVersionModal() { const m = document.getElementById('versionModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
+
+        async function saveVersion() {
+            const studyId = document.getElementById('versionStudyId').value;
+            const label = document.getElementById('versionLabel').value.trim();
+            if (!label) return toast('Version label is required', 'error');
+
+            const btn = document.getElementById('versionSaveBtn');
+            btn.disabled = true; btn.textContent = 'Parsing…';
+            try {
+                let v;
+                if (versionSource === 'file') {
+                    const fileInput = document.getElementById('versionFile');
+                    const f = fileInput.files[0];
+                    if (!f) { toast('Please choose a file', 'error'); return; }
+                    const fd = new FormData();
+                    fd.append('label', label);
+                    fd.append('file', f);
+                    // Note: no Content-Type header — the browser sets the multipart boundary.
+                    const res = await fetch(`/studies/${studyId}/versions/upload`, { method: 'POST', body: fd });
+                    v = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error(v.detail || `Upload failed (${res.status})`);
+                } else {
+                    const protocol_text = document.getElementById('versionText').value.trim();
+                    if (!protocol_text) { toast('Protocol text is required', 'error'); return; }
+                    v = await api(`/studies/${studyId}/versions`, { method: 'POST', body: JSON.stringify({ label, protocol_text }) });
+                }
+                toast(`Version created from ${v.source_type || 'text'} (${v.conflict_count || 0} conflicts)`, 'success');
+                closeVersionModal(); expanded.add(studyId); loadStudies();
+            } catch (e) { toast(e.message, 'error'); }
+            finally { btn.disabled = false; btn.textContent = 'Create & Parse'; }
+        }
+
+        async function deleteVersion(studyId, versionId, label) {
+            if (!confirm(`Delete version "${label}"?`)) return;
+            try { await api(`/studies/${studyId}/versions/${versionId}`, { method: 'DELETE' }); toast('Version deleted', 'success'); loadVersions(studyId); loadStudies(); }
+            catch (e) { toast(e.message, 'error'); }
+        }
+
+        async function updateStatus(studyId, versionId, status) {
+            try { await api(`/studies/${studyId}/versions/${versionId}`, { method: 'PATCH', body: JSON.stringify({ status }) }); toast(`Status → ${status}`, 'success'); loadVersions(studyId); }
+            catch (e) { toast(e.message, 'error'); }
+        }
+
+        async function saveReview(studyId, versionId) {
+            const reviewer = document.getElementById(`rev-${versionId}`).value.trim();
+            const comments = document.getElementById(`cmt-${versionId}`).value.trim();
+            try { await api(`/studies/${studyId}/versions/${versionId}`, { method: 'PATCH', body: JSON.stringify({ reviewer, comments }) }); toast('Review saved', 'success'); }
+            catch (e) { toast(e.message, 'error'); }
+        }
+
+        async function viewVersion(studyId, versionId) {
+            const box = document.getElementById(`sched-${versionId}`);
+            if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
+            box.classList.remove('hidden');
+            box.innerHTML = 'Loading…';
+            try {
+                const v = await api(`/studies/${studyId}/versions/${versionId}`);
+                box.innerHTML = `<pre class="whitespace-pre-wrap">${esc(JSON.stringify(v.schedule, null, 2))}</pre>`;
+            } catch (e) { box.innerHTML = `<span class="text-red-200">${esc(e.message)}</span>`; }
+        }
+
+        // close modals on backdrop click
+        ['studyModal','versionModal'].forEach(id => {
+            document.getElementById(id).addEventListener('click', (e) => { if (e.target.id === id) e.target.classList.add('hidden'); });
+        });
+
+        loadStudies();
+    </script>
+</body>
+</html>
