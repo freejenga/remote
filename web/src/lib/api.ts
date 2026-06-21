@@ -112,9 +112,10 @@ export async function chatStream(
   const decoder = new TextDecoder();
   let buf = '';
   let final: any = {};
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  let r: ReadableStreamReadResult<Uint8Array> | undefined;
+  // Read chunks until the stream ends
+  while (!(r = await reader.read()).done) {
+    const { value } = r;
     buf += decoder.decode(value, { stream: true });
     let sep: number;
     while ((sep = buf.indexOf('\n\n')) >= 0) {
